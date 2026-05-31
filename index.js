@@ -6,7 +6,8 @@ const restartBtn = document.getElementById('restart-btn');
 const movesLog = document.getElementById('moves-log');
 const gamesHistoryLog = document.getElementById('games-history-log');
 
-const socket = new WebSocket('wss://ajedrez-backend.onrender.com');
+const socket = new WebSocket('https://ajedrez-backend-fyjz.onrender.com/');
+
 let miColor = null; 
 let partidaIniciada = false;
 let currentTurn = 'W'; 
@@ -48,6 +49,7 @@ socket.onmessage = function(event) {
     if (data.type === 'init') {
         miColor = data.color;
         turnIndicator.innerText = `Eres las ${miColor === 'W' ? 'Blancas ⬜' : 'Negras ⬛'}. Esperando rival...`;
+        turnIndicator.style.backgroundColor = '#1e3a8a';
         drawBoard();
     }
     if (data.type === 'start') {
@@ -74,10 +76,8 @@ socket.onmessage = function(event) {
 };
 
 socket.onerror = function() {
-    turnIndicator.innerText = "Modo Local / Servidor Desconectado";
+    turnIndicator.innerText = "Error al conectar con el servidor de internet";
     turnIndicator.style.backgroundColor = '#7f1d1d';
-    partidaIniciada = true;
-    miColor = 'W';
 };
 
 function actualizarBannerTurno() {
@@ -105,20 +105,26 @@ function updateEloDisplay() {
 }
 
 function switchTab(tabName) {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-moves-btn').classList.remove('active');
+    document.getElementById('tab-history-btn').classList.remove('active');
+    document.getElementById('tab-moves').classList.remove('active');
+    document.getElementById('tab-history').classList.remove('active');
     
     if (tabName === 'moves') {
         document.getElementById('tab-moves-btn').classList.add('active');
         document.getElementById('tab-moves').classList.add('active');
-    } else {
+    } else if (tabName === 'history') {
         document.getElementById('tab-history-btn').classList.add('active');
         document.getElementById('tab-history').classList.add('active');
     }
 }
 
 function renderMovesLog() {
-    movesLog.innerHTML = '';
+    movesLog.innerHTML = ''; 
+    if (currentGameMoves.length === 0) {
+        movesLog.innerHTML = '<div style="color:#64748b; padding:10px;">No hay movimientos aún.</div>';
+        return;
+    }
     currentGameMoves.forEach((move, idx) => {
         const row = document.createElement('div');
         row.classList.add('move-row');
@@ -133,7 +139,7 @@ function renderMovesLog() {
 }
 
 function renderHistoryLog() {
-    gamesHistoryLog.innerHTML = '';
+    gamesHistoryLog.innerHTML = ''; 
     if (matchHistory.length === 0) {
         gamesHistoryLog.innerHTML = '<div style="color:#64748b; padding:10px;">No hay partidas guardadas.</div>';
         return;
@@ -212,7 +218,7 @@ function drawBoard() {
 
             if (validMoves.some(m => m.row === row && m.col === col)) {
                 if (piece && getPieceColor(piece) !== currentTurn) {
-                    square.style.backgroundColor = '#a1a1aa';
+                    square.style.backgroundColor = '#a1a1aa'; 
                 } else {
                     square.classList.add('suggested');
                 }
@@ -226,7 +232,7 @@ function drawBoard() {
 
 function handleSquareClick(event) {
     if (isGameOver || !partidaIniciada) return;
-    if (socket.readyState === WebSocket.OPEN && currentTurn !== miColor) return; 
+    if (currentTurn !== miColor) return; 
 
     const square = event.currentTarget;
     const row = parseInt(square.dataset.row);
@@ -296,7 +302,7 @@ function executeMove(fromRow, fromCol, toRow, toCol, enviarServidor = true) {
         turnIndicator.innerHTML = `🏆 ¡Jaque Mate! Ganan las ${ganadorText}`;
         turnIndicator.style.backgroundColor = '#15803d';
         
-        if (socket.readyState !== WebSocket.OPEN || miColor === 'W') {
+        if (miColor === 'W') {
             calcularNuevoElo(currentTurn === 'W' ? 'B' : 'W', ganadorText);
         }
     }
@@ -322,11 +328,7 @@ function calcularNuevoElo(ganadorKey, ganadorTexto) {
 }
 
 restartBtn.addEventListener('click', () => {
-    if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: "restart" }));
-    } else {
-        resetGameLocal();
-    }
+    socket.send(JSON.stringify({ type: "restart" }));
 });
 
 function resetGameLocal() {
@@ -338,9 +340,8 @@ function resetGameLocal() {
     ];
     currentTurn = 'W'; selectedSquare = null; validMoves = []; isGameOver = false; currentGameMoves = [];
     movedPieces = { 'W_king': false, 'W_rook_a': false, 'W_rook_h': false, 'B_king': false, 'B_rook_a': false, 'B_rook_h': false };
-    if (socket.readyState !== WebSocket.OPEN) partidaIniciada = true;
     actualizarBannerTurno();
-    renderMovesLog();
+    renderMovesLog(); 
     drawBoard();
 }
 
@@ -384,7 +385,7 @@ function isKingInCheck(color) {
     const kingPos = findKing(color); if (!kingPos) return false;
     const oppColor = color === 'W' ? 'B' : 'W';
     for (let r = 0; r < 8; r++) {
-        for (let c = 0; c < 8; c++) {
+        for (let c = 0; r < 8; c++) {
             const p = boardState[r][c];
             if (p && getPieceColor(p) === oppColor && getRawMoves(r, c, p).some(m => m.row === kingPos.row && m.col === kingPos.col)) return true;
         }
@@ -460,5 +461,6 @@ function getLineMoves(row, col, rowDir, colDir, color) {
 
 createCoordinates();
 updateEloDisplay();
+renderMovesLog();
 renderHistoryLog();
 drawBoard();
