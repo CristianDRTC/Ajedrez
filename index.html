@@ -3,40 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ajedrez Multijugador - Reto Elo</title>
+    <title>Ajedrez Dinámico - Reto Elo</title>
     <link rel="stylesheet" href="index.css">
 </head>
 <body>
+
     <div class="game-container">
-        
-        <div class="board-area">
-            <div class="board-wrapper">
-                <div id="chessboard"></div>
-            </div>
+        <div class="board-wrapper">
+            <div id="chessboard"></div>
         </div>
 
-        <div class="control-panel">
-            <div id="elo-panel" class="elo-bar"></div>
-            <div id="turn-indicator" class="status-banner">Conectando al servidor...</div>
+        <div class="sidebar">
+            <div id="elo-panel">
+                <span>⬜ Blancas: 1000</span>
+                <span>⬛ Negras: 1000</span>
+            </div>
+            
+            <div id="turn-indicator">Esperando conexión...</div>
 
-            <div class="tab-header">
+            <div class="tabs-container">
                 <button id="tab-moves-btn" class="tab-btn active" onclick="switchTab('moves')">Jugadas</button>
                 <button id="tab-history-btn" class="tab-btn" onclick="switchTab('history')">Historial</button>
             </div>
 
-            <div class="tab-content">
-                <div id="tab-moves" class="tab-pane active">
-                    <div id="moves-log" class="log-list"></div>
-                </div>
-                <div id="tab-history" class="tab-pane">
-                    <div id="games-history-log" class="log-list"></div>
-                </div>
+            <div id="tab-moves" class="tab-pane active">
+                <div id="moves-log"></div>
             </div>
 
-            <button id="restart-btn" class="btn-primary" disabled>Jugar otra vez / Reiniciar</button>
-        </div>
+            <div id="tab-history" class="tab-pane">
+                <div id="games-history-log"></div>
+            </div>
 
+            <button id="restart-btn" disabled>Jugar otra vez / Reiniciar</button>
+        </div>
     </div>
+
     <script src="index.js"></script>
 </body>
 </html>
