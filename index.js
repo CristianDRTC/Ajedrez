@@ -6,6 +6,7 @@ const restartBtn = document.getElementById('restart-btn');
 const movesLog = document.getElementById('moves-log');
 const gamesHistoryLog = document.getElementById('games-history-log');
 
+// Conexión WebSocket al Backend con la URL exacta en minúsculas
 const socket = new WebSocket('wss://ajedrez-backend-fyjz.onrender.com');
 
 let miColor = null; 
@@ -43,6 +44,11 @@ const unicodePieces = {
     '': ''
 };
 
+socket.onopen = function() {
+    turnIndicator.innerText = "Conectado. Buscando partida...";
+    turnIndicator.style.backgroundColor = '#1e3a8a';
+};
+
 socket.onmessage = function(event) {
     const data = JSON.parse(event.data);
 
@@ -76,8 +82,13 @@ socket.onmessage = function(event) {
 };
 
 socket.onerror = function() {
-    turnIndicator.innerText = "Error al conectar con el servidor de internet";
-    turnIndicator.style.backgroundColor = '#7f1d1d';
+    turnIndicator.innerText = "Modo Local / Conectando al servidor...";
+    turnIndicator.style.backgroundColor = '#b91c1c';
+};
+
+socket.onclose = function() {
+    turnIndicator.innerText = "Servidor Desconectado / Reintentando...";
+    turnIndicator.style.backgroundColor = '#b91c1c';
 };
 
 function actualizarBannerTurno() {
@@ -157,6 +168,8 @@ function renderHistoryLog() {
 }
 
 function createCoordinates() {
+    if (document.querySelector('.board-wrapper-numbers-left')) return;
+
     const leftNumbers = document.createElement('div');
     const rightNumbers = document.createElement('div');
     leftNumbers.classList.add('board-wrapper-numbers-left');
@@ -231,8 +244,8 @@ function drawBoard() {
 }
 
 function handleSquareClick(event) {
-    if (isGameOver || !partidaIniciada) return;
-    if (currentTurn !== miColor) return; 
+    if (isGameOver) return;
+    if (!partidaIniciada && socket.readyState === WebSocket.OPEN) return; 
 
     const square = event.currentTarget;
     const row = parseInt(square.dataset.row);
@@ -302,9 +315,7 @@ function executeMove(fromRow, fromCol, toRow, toCol, enviarServidor = true) {
         turnIndicator.innerHTML = `🏆 ¡Jaque Mate! Ganan las ${ganadorText}`;
         turnIndicator.style.backgroundColor = '#15803d';
         
-        if (miColor === 'W') {
-            calcularNuevoElo(currentTurn === 'W' ? 'B' : 'W', ganadorText);
-        }
+        calcularNuevoElo(currentTurn === 'W' ? 'B' : 'W', ganadorText);
     }
 }
 
@@ -328,7 +339,11 @@ function calcularNuevoElo(ganadorKey, ganadorTexto) {
 }
 
 restartBtn.addEventListener('click', () => {
-    socket.send(JSON.stringify({ type: "restart" }));
+    if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: "restart" }));
+    } else {
+        resetGameLocal();
+    }
 });
 
 function resetGameLocal() {
@@ -347,4 +362,120 @@ function resetGameLocal() {
 
 function findKing(color) {
     const targetKing = color === 'W' ? 'K' : 'k';
-    for (let r = 0; r
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) { if (boardState[r][c] === targetKing) return { row: r, col: c }; }
+    }
+    return null;
+}
+
+function getRawMoves(row, col, piece) {
+    let moves = []; const type = piece.toLowerCase(); const color = getPieceColor(piece);
+    const straightDirs = [[-1, 0], [1, 0], [0, -1], [0, 1]]; const diagDirs = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+
+    switch (type) {
+        case 'p':
+            const dir = color === 'W' ? -1 : 1;
+            [-1, 1].forEach(c => { if (col + c >= 0 && col + c < 8 && row + dir >= 0 && row + dir < 8) moves.push({ row: row + dir, col: col + c }); });
+            break;
+        case 't': straightDirs.forEach(d => moves = moves.concat(getLineMoves(row, col, d[0], d[1], color))); break;
+        case 'a': diagDirs.forEach(d => moves = moves.concat(getLineMoves(row, col, d[0], d[1], color))); break;
+        case 'q': straightDirs.concat(diagDirs).forEach(d => moves = moves.concat(getLineMoves(row, col, d[0], d[1], color))); break;
+        case 'k':
+            straightDirs.concat(diagDirs).forEach(d => {
+                const nR = row + d[0], nC = col + d[1];
+                if (nR >= 0 && nR < 8 && nC >= 0 && nC < 8) moves.push({ row: nR, col: nC });
+            });
+            break;
+        case 'c':
+            [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(m => {
+                const nR = row + m[0], nC = col + m[1];
+                if (nR >= 0 && nR < 8 && nC >= 0 && nC < 8) moves.push({ row: nR, col: nC });
+            });
+            break;
+    }
+    return moves;
+}
+
+function isKingInCheck(color) {
+    const kingPos = findKing(color); if (!kingPos) return false;
+    const oppColor = color === 'W' ? 'B' : 'W';
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            const p = boardState[r][c];
+            if (p && getPieceColor(p) === oppColor && getRawMoves(r, c, p).some(m => m.row === kingPos.row && m.col === kingPos.col)) return true;
+        }
+    }
+    return false;
+}
+
+function playerHasLegalMoves(color) {
+    for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
+            const p = boardState[r][c];
+            if (p && getPieceColor(p) === color && calculateValidMoves(r, c, p).length > 0) return true;
+        }
+    }
+    return false;
+}
+
+function calculateValidMoves(row, col, piece) {
+    let moves = []; const type = piece.toLowerCase(); const color = getPieceColor(piece);
+    const straightDirs = [[-1, 0], [1, 0], [0, -1], [0, 1]]; const diagDirs = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
+
+    switch (type) {
+        case 'p':
+            const d = color === 'W' ? -1 : 1;
+            if (row + d >= 0 && row + d < 8 && boardState[row + d][col] === '') {
+                moves.push({ row: row + d, col });
+                if (row === (color === 'W' ? 6 : 1) && boardState[row + d * 2][col] === '') moves.push({ row: row + d * 2, col });
+            }
+            [col - 1, col + 1].forEach(c => {
+                if (c >= 0 && c < 8 && row + d >= 0 && row + d < 8 && boardState[row + d][c] && getPieceColor(boardState[row + d][c]) !== color) moves.push({ row: row + d, col: c });
+            });
+            break;
+        case 't': straightDirs.forEach(dir => moves = moves.concat(getLineMoves(row, col, dir[0], dir[1], color))); break;
+        case 'a': diagDirs.forEach(dir => moves = moves.concat(getLineMoves(row, col, dir[0], dir[1], color))); break;
+        case 'q': straightDirs.concat(diagDirs).forEach(dir => moves = moves.concat(getLineMoves(row, col, dir[0], dir[1], color))); break;
+        case 'k':
+            straightDirs.concat(diagDirs).forEach(dir => {
+                const nR = row + dir[0], nC = col + dir[1];
+                if (nR >= 0 && nR < 8 && nC >= 0 && nC < 8 && (boardState[nR][nC] === '' || getPieceColor(boardState[nR][nC]) !== color)) moves.push({ row: nR, col: nC });
+            });
+            if (!movedPieces[`${color}_king`]) {
+                const r = color === 'W' ? 7 : 0;
+                if (!movedPieces[`${color}_rook_h`] && boardState[r][5] === '' && boardState[r][6] === '') moves.push({ row: r, col: 6 });
+                if (!movedPieces[`${color}_rook_a`] && boardState[r][1] === '' && boardState[r][2] === '' && boardState[r][3] === '') moves.push({ row: r, col: 2 });
+            }
+            break;
+        case 'c':
+            [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(m => {
+                const nR = row + m[0], nC = col + m[1];
+                if (nR >= 0 && nR < 8 && nC >= 0 && nC < 8 && (boardState[nR][nC] === '' || getPieceColor(boardState[nR][nC]) !== color)) moves.push({ row: nR, col: nC });
+            });
+            break;
+    }
+
+    return moves.filter(m => {
+        const dest = boardState[m.row][m.col];
+        boardState[m.row][m.col] = piece; boardState[row][col] = '';
+        const check = isKingInCheck(color);
+        boardState[row][col] = piece; boardState[m.row][m.col] = dest;
+        return !check;
+    });
+}
+
+function getLineMoves(row, col, rowDir, colDir, color) {
+    const lm = []; let r = row + rowDir; let c = col + colDir;
+    while (r >= 0 && r < 8 && c >= 0 && c < 8) {
+        if (boardState[r][c] === '') lm.push({ row: r, col: c });
+        else { if (getPieceColor(boardState[r][c]) !== color) lm.push({ row: r, col: c }); break; }
+        r += rowDir; c += colDir;
+    }
+    return lm;
+}
+
+createCoordinates();
+updateEloDisplay();
+renderMovesLog();
+renderHistoryLog();
+drawBoard();
