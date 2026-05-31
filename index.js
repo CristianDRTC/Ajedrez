@@ -6,8 +6,7 @@ const restartBtn = document.getElementById('restart-btn');
 const movesLog = document.getElementById('moves-log');
 const gamesHistoryLog = document.getElementById('games-history-log');
 
-const socket = new WebSocket('ws://localhost:8080');
-
+const socket = new WebSocket('wss://ajedrez-backend.onrender.com');
 let miColor = null; 
 let partidaIniciada = false;
 let currentTurn = 'W'; 
