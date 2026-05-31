@@ -6,8 +6,7 @@ const restartBtn = document.getElementById('restart-btn');
 const movesLog = document.getElementById('moves-log');
 const gamesHistoryLog = document.getElementById('games-history-log');
 
-// Reemplaza el localhost por tu enlace real de Render:
-const socket = new WebSocket('wss://tu-ajedrez.onrender.com');
+const socket = new WebSocket('ws://localhost:8080');
 
 let miColor = null; 
 let partidaIniciada = false;
@@ -44,7 +43,6 @@ const unicodePieces = {
     '': ''
 };
 
-// --- RECEPCIÓN DE MENSAJES DEL SERVIDOR ---
 socket.onmessage = function(event) {
     const data = JSON.parse(event.data);
 
@@ -68,12 +66,19 @@ socket.onmessage = function(event) {
     if (data.type === 'opponent_left') {
         partidaIniciada = false;
         restartBtn.disabled = true;
-        turnIndicator.innerText = "El rival se desconectó. Esperando nuevo jugador...";
+        turnIndicator.innerText = "El rival abandonó la sala. Esperando oponente...";
         turnIndicator.style.backgroundColor = '#b45309';
     }
     if (data.type === 'error') {
         alert(data.message);
     }
+};
+
+socket.onerror = function() {
+    turnIndicator.innerText = "Modo Local / Servidor Desconectado";
+    turnIndicator.style.backgroundColor = '#7f1d1d';
+    partidaIniciada = true;
+    miColor = 'W';
 };
 
 function actualizarBannerTurno() {
@@ -131,16 +136,16 @@ function renderMovesLog() {
 function renderHistoryLog() {
     gamesHistoryLog.innerHTML = '';
     if (matchHistory.length === 0) {
-        gamesHistoryLog.innerHTML = '<div style="color:#64748b; padding:10px;">No hay partidas registradas.</div>';
+        gamesHistoryLog.innerHTML = '<div style="color:#64748b; padding:10px;">No hay partidas guardadas.</div>';
         return;
     }
     matchHistory.slice().reverse().forEach(game => {
         const item = document.createElement('div');
         item.classList.add('history-item');
         item.innerHTML = `
-            <strong>🏆 Ganador: ${game.winner}</strong><br>
+            <strong>🏆 Ganó: ${game.winner}</strong><br>
             <span style="color:#64748b; font-size:11px;">${game.date}</span><br>
-            Var. Elo: B (${game.oldW} ➜ ${game.newW}) | N (${game.oldB} ➜ ${game.newB})
+            Elo: B(${game.oldW}➔${game.newW}) | N(${game.oldB}➔${game.newB})
         `;
         gamesHistoryLog.appendChild(item);
     });
@@ -169,7 +174,6 @@ function getPieceColor(piece) {
 function drawBoard() {
     boardElement.innerHTML = '';
     
-    // Girar tablero si eres Negras ('B') para ver tu lado
     if (miColor === 'B') {
         boardElement.style.transform = 'rotate(180deg)';
         document.querySelectorAll('.board-wrapper-numbers-left, .board-wrapper-numbers-right').forEach(el => el.style.transform = 'rotate(180deg)');
@@ -197,7 +201,6 @@ function drawBoard() {
                 pieceElement.innerText = unicodePieces[piece];
                 pieceElement.classList.add(getPieceColor(piece) === 'W' ? 'piece-white' : 'piece-black');
                 
-                // Contrarrestar rotación en las piezas
                 if (miColor === 'B') pieceElement.style.transform = 'rotate(180deg)';
                 
                 square.appendChild(pieceElement);
@@ -208,10 +211,9 @@ function drawBoard() {
 
             if (selectedSquare && selectedSquare.row === row && selectedSquare.col === col) square.classList.add('selected');
 
-            // Sugerencias + Resaltado Gris de Capturas
             if (validMoves.some(m => m.row === row && m.col === col)) {
                 if (piece && getPieceColor(piece) !== currentTurn) {
-                    square.style.backgroundColor = '#a1a1aa'; // Gris si puede comer
+                    square.style.backgroundColor = '#a1a1aa';
                 } else {
                     square.classList.add('suggested');
                 }
@@ -225,7 +227,7 @@ function drawBoard() {
 
 function handleSquareClick(event) {
     if (isGameOver || !partidaIniciada) return;
-    if (currentTurn !== miColor) return; // Forzar a jugar solo en tu propio turno
+    if (socket.readyState === WebSocket.OPEN && currentTurn !== miColor) return; 
 
     const square = event.currentTarget;
     const row = parseInt(square.dataset.row);
@@ -254,7 +256,7 @@ function executeMove(fromRow, fromCol, toRow, toCol, enviarServidor = true) {
     const type = piece.toLowerCase();
     const color = getPieceColor(piece);
     
-    if (enviarServidor && partidaIniciada) {
+    if (enviarServidor && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: "move", fromRow, fromCol, toRow, toCol }));
     }
 
@@ -266,7 +268,6 @@ function executeMove(fromRow, fromCol, toRow, toCol, enviarServidor = true) {
     }
     renderMovesLog();
 
-    // Enroques
     if (type === 'k' && Math.abs(toCol - fromCol) === 2) {
         if (toCol === 6) { boardState[toRow][5] = boardState[toRow][7]; boardState[toRow][7] = ''; }
         else if (toCol === 2) { boardState[toRow][3] = boardState[toRow][0]; boardState[toRow][0] = ''; }
@@ -296,8 +297,7 @@ function executeMove(fromRow, fromCol, toRow, toCol, enviarServidor = true) {
         turnIndicator.innerHTML = `🏆 ¡Jaque Mate! Ganan las ${ganadorText}`;
         turnIndicator.style.backgroundColor = '#15803d';
         
-        // El cálculo de Elo solo lo ejecuta un jugador para evitar duplicados en localStorage
-        if (miColor === 'W') {
+        if (socket.readyState !== WebSocket.OPEN || miColor === 'W') {
             calcularNuevoElo(currentTurn === 'W' ? 'B' : 'W', ganadorText);
         }
     }
@@ -322,9 +322,12 @@ function calcularNuevoElo(ganadorKey, ganadorTexto) {
     renderHistoryLog();
 }
 
-// Envía la orden de reiniciar a través de la red
 restartBtn.addEventListener('click', () => {
-    if (partidaIniciada) socket.send(JSON.stringify({ type: "restart" }));
+    if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: "restart" }));
+    } else {
+        resetGameLocal();
+    }
 });
 
 function resetGameLocal() {
@@ -336,6 +339,7 @@ function resetGameLocal() {
     ];
     currentTurn = 'W'; selectedSquare = null; validMoves = []; isGameOver = false; currentGameMoves = [];
     movedPieces = { 'W_king': false, 'W_rook_a': false, 'W_rook_h': false, 'B_king': false, 'B_rook_a': false, 'B_rook_h': false };
+    if (socket.readyState !== WebSocket.OPEN) partidaIniciada = true;
     actualizarBannerTurno();
     renderMovesLog();
     drawBoard();
@@ -454,8 +458,8 @@ function getLineMoves(row, col, rowDir, colDir, color) {
     }
     return lm;
 }
-// --- ESTO DEBE IR AL FINAL DE TU INDEX.JS ---
+
 createCoordinates();
 updateEloDisplay();
 renderHistoryLog();
-drawBoard(); // <-- Esta línea pinta el tablero apenas carga la página, sin importar el servidor
+drawBoard();
