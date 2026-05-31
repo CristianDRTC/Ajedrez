@@ -1,271 +1,42 @@
-* {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ajedrez Multijugador - Reto Elo</title>
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div class="game-container">
+        
+        <div class="board-area">
+            <div class="board-wrapper">
+                <div id="chessboard"></div>
+            </div>
+        </div>
 
-body {
-    background-color: #1e293b;
-    color: #f8fafc;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
-    padding: 10px; /* Reducido para móviles */
-}
+        <div class="control-panel">
+            <div id="elo-panel" class="elo-bar"></div>
+            <div id="turn-indicator" class="status-banner">Conectando al servidor...</div>
 
-.game-container {
-    display: flex;
-    flex-direction: row;
-    gap: 20px;
-    background-color: #0f172a;
-    padding: 20px;
-    border-radius: 16px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
-    max-width: 1100px;
-    width: 100%;
-}
+            <div class="tab-header">
+                <button id="tab-moves-btn" class="tab-btn active" onclick="switchTab('moves')">Jugadas</button>
+                <button id="tab-history-btn" class="tab-btn" onclick="switchTab('history')">Historial</button>
+            </div>
 
-.board-area {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    flex: 1;
-}
+            <div class="tab-content">
+                <div id="tab-moves" class="tab-pane active">
+                    <div id="moves-log" class="log-list"></div>
+                </div>
+                <div id="tab-history" class="tab-pane">
+                    <div id="games-history-log" class="log-list"></div>
+                </div>
+            </div>
 
-.board-wrapper {
-    position: relative;
-    padding: 20px;
-    max-width: 100%;
-}
+            <button id="restart-btn" class="btn-primary" disabled>Jugar otra vez / Reiniciar</button>
+        </div>
 
-#chessboard {
-    display: grid;
-    /* Usamos variables CSS para controlar el tamaño dinámicamente */
-    grid-template-columns: repeat(8, var(--square-size, 65px));
-    grid-template-rows: repeat(8, var(--square-size, 65px));
-    border: 4px solid #334155;
-    border-radius: 4px;
-    overflow: hidden;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-    transition: transform 0.5s ease;
-    margin: 0 auto;
-}
-
-:root {
-    --square-size: 60px; /* Tamaño por defecto para PCs medianas */
-}
-
-.square {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: calc(var(--square-size) * 0.6); /* Ajusta el tamaño de la ficha proporcionalmente */
-    cursor: pointer;
-    user-select: none;
-    transition: background-color 0.15s ease;
-}
-
-.square.light { background-color: #f0d9b5; }
-.square.dark { background-color: #b58863; }
-
-.piece-white { color: #ffffff; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.6)); }
-.piece-black { color: #000000; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4)); }
-
-.square.selected { background-color: #79a663 !important; }
-.square.suggested {
-    position: relative;
-}
-.square.suggested::after {
-    content: '';
-    width: 30%;
-    height: 30%;
-    background-color: rgba(0, 0, 0, 0.2);
-    border-radius: 50%;
-    position: absolute;
-}
-
-.board-wrapper-numbers-left, .board-wrapper-numbers-right {
-    position: absolute;
-    display: flex;
-    flex-direction: column;
-    justify-content: space-around;
-    height: calc(var(--square-size) * 8);
-    top: 20px;
-    font-size: 12px;
-    font-weight: bold;
-    color: #94a3b8;
-    transition: transform 0.5s ease;
-}
-.board-wrapper-numbers-left { left: 4px; }
-.board-wrapper-numbers-right { right: 4px; }
-
-.control-panel {
-    width: 340px; /* Ancho fijo en escritorio */
-    display: flex;
-    flex-direction: column;
-    background-color: #1e293b;
-    padding: 16px;
-    border-radius: 12px;
-    border: 1px solid #334155;
-}
-
-.elo-bar {
-    display: flex;
-    justify-content: space-between;
-    font-weight: bold;
-    background-color: #334155;
-    padding: 10px;
-    border-radius: 8px;
-    margin-bottom: 12px;
-    font-size: 14px;
-}
-
-.status-banner {
-    text-align: center;
-    font-weight: bold;
-    font-size: 15px;
-    padding: 10px;
-    background-color: #475569;
-    border-radius: 8px;
-    margin-bottom: 15px;
-    color: #e2e8f0;
-}
-
-.tab-header {
-    display: flex;
-    border-bottom: 2px solid #334155;
-    margin-bottom: 10px;
-}
-
-.tab-btn {
-    flex: 1;
-    background: none;
-    border: none;
-    color: #94a3b8;
-    padding: 10px;
-    font-size: 13px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: color 0.2s;
-}
-
-.tab-btn.active {
-    color: #38bdf8;
-    border-bottom: 2px solid #38bdf8;
-    margin-bottom: -2px;
-}
-
-.tab-content {
-    flex: 1;
-    min-height: 150px;
-    max-height: 200px;
-    overflow-y: auto;
-    background-color: #0f172a;
-    border-radius: 8px;
-    padding: 10px;
-    margin-bottom: 15px;
-}
-
-.log-list {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    font-size: 13px;
-    color: #cbd5e1;
-}
-
-.move-row {
-    display: grid;
-    grid-template-columns: 35px 1fr 1fr;
-    padding: 4px 6px;
-    border-bottom: 1px solid #1e293b;
-}
-
-.move-index { color: #64748b; font-weight: bold; }
-
-.history-item {
-    padding: 6px 8px;
-    border-bottom: 1px solid #334155;
-    font-size: 12px;
-    line-height: 1.4;
-}
-
-.btn-primary {
-    background-color: #0284c7;
-    color: white;
-    border: none;
-    padding: 12px;
-    font-size: 15px;
-    font-weight: bold;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background-color 0.2s;
-    width: 100%;
-}
-.btn-primary:hover:not(:disabled) { background-color: #0369a1; }
-.btn-primary:disabled { background-color: #475569; cursor: not-allowed; opacity: 0.6; }
-
-/* ==========================================================================
-   MÓVILES Y TABLETS (MEDIA QUERIES)
-   ========================================================================== */
-
-/* Computadoras pequeñas o tablets de lado */
-@media (max-width: 950px) {
-    :root {
-        --square-size: 50px;
-    }
-}
-
-/* Celulares (Cambio de diseño de horizontal a vertical) */
-@media (max-width: 768px) {
-    body {
-        padding: 5px;
-    }
-
-    .game-container {
-        flex-direction: column; /* Tablero arriba, controles abajo */
-        padding: 12px;
-        gap: 15px;
-    }
-
-    :root {
-        /* Encoge las casillas a 42px para que quepan holgadamente en pantallas de 360px de ancho */
-        --square-size: 42px; 
-    }
-
-    .board-wrapper {
-        padding: 15px; /* Reducimos margen para ganar espacio */
-    }
-
-    .board-wrapper-numbers-left, .board-wrapper-numbers-right {
-        font-size: 10px;
-        top: 15px;
-    }
-    .board-wrapper-numbers-left { left: 2px; }
-    .board-wrapper-numbers-right { right: 2px; }
-
-    .control-panel {
-        width: 100%; /* Toma todo el ancho disponible del celular */
-        max-width: 100%;
-    }
-
-    .tab-content {
-        min-height: 120px;
-        max-height: 150px; /* Acortamos el panel para no obligar a hacer tanto scroll general */
-    }
-}
-
-/* Celulares muy pequeños (Pantallas viejas o angostas) */
-@media (max-width: 380px) {
-    :root {
-        --square-size: 36px;
-    }
-    .board-wrapper {
-        padding: 10px;
-    }
-    .board-wrapper-numbers-left, .board-wrapper-numbers-right {
-        display: none; /* Escondemos los números laterales para priorizar el espacio del tablero */
-    }
-}
+    </div>
+    <script src="index.js"></script>
+</body>
+</html>
