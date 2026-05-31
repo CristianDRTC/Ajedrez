@@ -12,15 +12,15 @@ body {
     justify-content: center;
     align-items: center;
     min-height: 100vh;
-    padding: 20px;
+    padding: 10px; /* Reducido para móviles */
 }
 
 .game-container {
     display: flex;
     flex-direction: row;
-    gap: 30px;
+    gap: 20px;
     background-color: #0f172a;
-    padding: 24px;
+    padding: 20px;
     border-radius: 16px;
     box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
     max-width: 1100px;
@@ -31,29 +31,37 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
+    flex: 1;
 }
 
 .board-wrapper {
     position: relative;
     padding: 20px;
+    max-width: 100%;
 }
 
 #chessboard {
     display: grid;
-    grid-template-columns: repeat(8, 65px);
-    grid-template-rows: repeat(8, 65px);
+    /* Usamos variables CSS para controlar el tamaño dinámicamente */
+    grid-template-columns: repeat(8, var(--square-size, 65px));
+    grid-template-rows: repeat(8, var(--square-size, 65px));
     border: 4px solid #334155;
     border-radius: 4px;
     overflow: hidden;
     box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     transition: transform 0.5s ease;
+    margin: 0 auto;
+}
+
+:root {
+    --square-size: 60px; /* Tamaño por defecto para PCs medianas */
 }
 
 .square {
     display: flex;
     justify-content: center;
     align-items: center;
-    font-size: 38px;
+    font-size: calc(var(--square-size) * 0.6); /* Ajusta el tamaño de la ficha proporcionalmente */
     cursor: pointer;
     user-select: none;
     transition: background-color 0.15s ease;
@@ -71,8 +79,8 @@ body {
 }
 .square.suggested::after {
     content: '';
-    width: 16px;
-    height: 16px;
+    width: 30%;
+    height: 30%;
     background-color: rgba(0, 0, 0, 0.2);
     border-radius: 50%;
     position: absolute;
@@ -83,22 +91,22 @@ body {
     display: flex;
     flex-direction: column;
     justify-content: space-around;
-    height: 520px;
+    height: calc(var(--square-size) * 8);
     top: 20px;
-    font-size: 14px;
+    font-size: 12px;
     font-weight: bold;
     color: #94a3b8;
     transition: transform 0.5s ease;
 }
-.board-wrapper-numbers-left { left: 2px; }
-.board-wrapper-numbers-right { right: 2px; }
+.board-wrapper-numbers-left { left: 4px; }
+.board-wrapper-numbers-right { right: 4px; }
 
 .control-panel {
-    flex: 1;
+    width: 340px; /* Ancho fijo en escritorio */
     display: flex;
     flex-direction: column;
     background-color: #1e293b;
-    padding: 20px;
+    padding: 16px;
     border-radius: 12px;
     border: 1px solid #334155;
 }
@@ -108,20 +116,20 @@ body {
     justify-content: space-between;
     font-weight: bold;
     background-color: #334155;
-    padding: 12px;
+    padding: 10px;
     border-radius: 8px;
     margin-bottom: 12px;
-    font-size: 15px;
+    font-size: 14px;
 }
 
 .status-banner {
     text-align: center;
     font-weight: bold;
-    font-size: 16px;
+    font-size: 15px;
     padding: 10px;
     background-color: #475569;
     border-radius: 8px;
-    margin-bottom: 20px;
+    margin-bottom: 15px;
     color: #e2e8f0;
 }
 
@@ -137,7 +145,7 @@ body {
     border: none;
     color: #94a3b8;
     padding: 10px;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: bold;
     cursor: pointer;
     transition: color 0.2s;
@@ -151,30 +159,27 @@ body {
 
 .tab-content {
     flex: 1;
-    min-height: 220px;
-    max-height: 250px;
+    min-height: 150px;
+    max-height: 200px;
     overflow-y: auto;
     background-color: #0f172a;
     border-radius: 8px;
-    padding: 12px;
-    margin-bottom: 20px;
+    padding: 10px;
+    margin-bottom: 15px;
 }
-
-.tab-pane { display: none; }
-.tab-pane.active { display: block; }
 
 .log-list {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    font-size: 14px;
+    font-size: 13px;
     color: #cbd5e1;
 }
 
 .move-row {
     display: grid;
-    grid-template-columns: 40px 1fr 1fr;
-    padding: 4px 8px;
+    grid-template-columns: 35px 1fr 1fr;
+    padding: 4px 6px;
     border-bottom: 1px solid #1e293b;
 }
 
@@ -183,7 +188,7 @@ body {
 .history-item {
     padding: 6px 8px;
     border-bottom: 1px solid #334155;
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1.4;
 }
 
@@ -191,8 +196,8 @@ body {
     background-color: #0284c7;
     color: white;
     border: none;
-    padding: 14px;
-    font-size: 16px;
+    padding: 12px;
+    font-size: 15px;
     font-weight: bold;
     border-radius: 8px;
     cursor: pointer;
@@ -202,7 +207,65 @@ body {
 .btn-primary:hover:not(:disabled) { background-color: #0369a1; }
 .btn-primary:disabled { background-color: #475569; cursor: not-allowed; opacity: 0.6; }
 
-@media (max-width: 850px) {
-    .game-container { flex-direction: column; align-items: center; }
-    .control-panel { width: 100%; max-width: 520px; }
+/* ==========================================================================
+   MÓVILES Y TABLETS (MEDIA QUERIES)
+   ========================================================================== */
+
+/* Computadoras pequeñas o tablets de lado */
+@media (max-width: 950px) {
+    :root {
+        --square-size: 50px;
+    }
+}
+
+/* Celulares (Cambio de diseño de horizontal a vertical) */
+@media (max-width: 768px) {
+    body {
+        padding: 5px;
+    }
+
+    .game-container {
+        flex-direction: column; /* Tablero arriba, controles abajo */
+        padding: 12px;
+        gap: 15px;
+    }
+
+    :root {
+        /* Encoge las casillas a 42px para que quepan holgadamente en pantallas de 360px de ancho */
+        --square-size: 42px; 
+    }
+
+    .board-wrapper {
+        padding: 15px; /* Reducimos margen para ganar espacio */
+    }
+
+    .board-wrapper-numbers-left, .board-wrapper-numbers-right {
+        font-size: 10px;
+        top: 15px;
+    }
+    .board-wrapper-numbers-left { left: 2px; }
+    .board-wrapper-numbers-right { right: 2px; }
+
+    .control-panel {
+        width: 100%; /* Toma todo el ancho disponible del celular */
+        max-width: 100%;
+    }
+
+    .tab-content {
+        min-height: 120px;
+        max-height: 150px; /* Acortamos el panel para no obligar a hacer tanto scroll general */
+    }
+}
+
+/* Celulares muy pequeños (Pantallas viejas o angostas) */
+@media (max-width: 380px) {
+    :root {
+        --square-size: 36px;
+    }
+    .board-wrapper {
+        padding: 10px;
+    }
+    .board-wrapper-numbers-left, .board-wrapper-numbers-right {
+        display: none; /* Escondemos los números laterales para priorizar el espacio del tablero */
+    }
 }
