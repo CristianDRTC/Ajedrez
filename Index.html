@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ajedrez Multijugador - Reto Elo</title>
+    <link rel="stylesheet" href="Index.css">
+</head>
+<body>
+    <div class="game-container">
+        
+        <!-- Zona Izquierda: Tablero -->
+        <div class="board-area">
+            <div class="board-wrapper">
+                <div id="chessboard"></div>
+            </div>
+        </div>
+
+        <!-- Zona Derecha: Panel de Control -->
+        <div class="control-panel">
+            <div id="elo-panel" class="elo-bar"></div>
+            <div id="turn-indicator" class="status-banner">Conectando al servidor...</div>
+
+            <!-- Pestañas para organizar la información -->
+            <div class="tab-header">
+                <button id="tab-moves-btn" class="tab-btn active" onclick="switchTab('moves')">Jugadas</button>
+                <button id="tab-history-btn" class="tab-btn" onclick="switchTab('history')">Historial de Partidas</button>
+            </div>
+
+            <!-- Contenido de las Pestañas -->
+            <div class="tab-content">
+                <div id="tab-moves" class="tab-pane active">
+                    <div id="moves-log" class="log-list"></div>
+                </div>
+                <div id="tab-history" class="tab-pane">
+                    <div id="games-history-log" class="log-list"></div>
+                </div>
+            </div>
+
+            <button id="restart-btn" class="btn-primary" disabled>Jugar otra vez / Reiniciar</button>
+        </div>
+
+    </div>
+    <script src="Index.js"></script>
+</body>
+</html>
