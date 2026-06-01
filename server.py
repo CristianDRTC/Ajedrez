@@ -1,23 +1,23 @@
-import os
-import asyncio
-import json
-import websockets
+import os 
+import asyncio 
+import json 
+import websockets 
 
 CONNECTED = set()
 PARTIDA = {"W": None, "B": None}
 
 async def handler(websocket):
-    global PARTIDA
+    global PARTIDA 
     CONNECTED.add(websocket)
-    
-    color_asignado = None
+
+    color_asignado = None 
     if PARTIDA["W"] is None:
-        PARTIDA["W"] = websocket
+        PARTIDA["W"] = websocket 
         color_asignado = "W"
     elif PARTIDA["B"] is None:
-        PARTIDA["B"] = websocket
+        PARTIDA["B"] = websocket 
         color_asignado = "B"
-        
+
     if color_asignado:
         await websocket.send(json.dumps({"type": "init", "color": color_asignado}))
         if PARTIDA["W"] and PARTIDA["B"]:
@@ -25,12 +25,15 @@ async def handler(websocket):
     else:
         await websocket.send(json.dumps({"type": "error", "message": "Sala llena. Intenta más tarde."}))
         CONNECTED.remove(websocket)
-        return
+        return 
 
     try:
         async for message in websocket:
             data = json.loads(message)
-            if data["type"] == "move":
+            msg_type = data.get("type")
+
+            # 1. ENVIAR MOVIMIENTOS (Tu lógica original)
+            if msg_type == "move":
                 for ws in CONNECTED:
                     if ws != websocket:
                         await ws.send(json.dumps({
@@ -38,18 +41,50 @@ async def handler(websocket):
                             "fromRow": data["fromRow"],
                             "fromCol": data["fromCol"],
                             "toRow": data["toRow"],
-                            "toCol": data["toCol"]
+                            "toCol": data["toCol"],
+                            "promotedPiece": data.get("promotedPiece") # Mantiene soporte de coronación
                         }))
-            elif data["type"] == "restart":
+
+            # 2. ENVIAR MENSAJE DE RENDICIÓN AL RIVAL
+            elif msg_type == "resign":
+                for ws in CONNECTED:
+                    if ws != websocket:
+                        await ws.send(json.dumps({
+                            "type": "resign",
+                            "color": data.get("color"),
+                            "colorQueAbandona": data.get("colorQueAbandona")
+                        }))
+
+            # 3. ENVIAR OFERTA DE TABLAS AL RIVAL
+            elif msg_type == "offer_draw":
+                for ws in CONNECTED:
+                    if ws != websocket:
+                        await ws.send(json.dumps({
+                            "type": "offer_draw",
+                            "sender": data.get("sender"),
+                            "color": data.get("color")
+                        }))
+
+            # 4. ENVIAR ACEPTACIÓN DE TABLAS AL RIVAL
+            elif msg_type == "accept_draw":
+                for ws in CONNECTED:
+                    if ws != websocket:
+                        await ws.send(json.dumps({
+                            "type": "accept_draw"
+                        }))
+
+            # 5. REINICIAR (Tu lógica original)
+            elif msg_type == "restart":
                 websockets.broadcast(CONNECTED, json.dumps({"type": "restart"}))
+
     except websockets.exceptions.ConnectionClosed:
-        pass
+        pass 
     finally:
         CONNECTED.remove(websocket)
         if PARTIDA["W"] == websocket:
-            PARTIDA["W"] = None
+            PARTIDA["W"] = None 
         elif PARTIDA["B"] == websocket:
-            PARTIDA["B"] = None
+            PARTIDA["B"] = None 
         websockets.broadcast(CONNECTED, json.dumps({"type": "opponent_left"}))
 
 async def main():
