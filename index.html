@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ajedrez Dinámico - Reto Elo</title>
+    <title>Ajedrez Premium - Arena Pro</title>
     <link rel="stylesheet" href="index.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
 
@@ -15,26 +16,44 @@
 
         <div class="sidebar">
             <div id="elo-panel">
-                <span>⬜ Blancas: 1000</span>
-                <span>⬛ Negras: 1000</span>
+                <div class="player-card white-player">
+                    <span class="avatar">⬜</span>
+                    <div class="player-info">
+                        <span class="name">Blancas</span>
+                        <span class="elo-tag" id="elo-white">1000</span>
+                    </div>
+                </div>
+                <div class="player-divider">VS</div>
+                <div class="player-card black-player">
+                    <span class="avatar">⬛</span>
+                    <div class="player-info">
+                        <span class="name">Negras</span>
+                        <span class="elo-tag" id="elo-black">1000</span>
+                    </div>
+                </div>
             </div>
             
-            <div id="turn-indicator">Esperando conexión...</div>
+            <div id="turn-indicator">Estableciendo conexión...</div>
 
             <div class="tabs-container">
                 <button id="tab-moves-btn" class="tab-btn active" onclick="switchTab('moves')">Jugadas</button>
                 <button id="tab-history-btn" class="tab-btn" onclick="switchTab('history')">Historial</button>
             </div>
 
-            <div id="tab-moves" class="tab-pane active">
-                <div id="moves-log"></div>
+            <div class="tab-content-wrapper">
+                <div id="tab-moves" class="tab-pane active">
+                    <div id="moves-log"></div>
+                </div>
+
+                <div id="tab-history" class="tab-pane">
+                    <div id="games-history-log"></div>
+                </div>
             </div>
 
-            <div id="tab-history" class="tab-pane">
-                <div id="games-history-log"></div>
+            <div class="action-buttons-container">
+                <button id="draw-btn" class="action-btn draw" disabled>Ofrecer Tablas</button>
+                <button id="resign-btn" class="action-btn resign" disabled>Rendirse</button>
             </div>
-
-            <button id="restart-btn" disabled>Jugar otra vez / Reiniciar</button>
         </div>
     </div>
 
