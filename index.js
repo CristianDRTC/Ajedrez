@@ -20,7 +20,7 @@ let partidaIniciada = false;
 let currentTurn = 'W'; 
 let selectedSquare = null; 
 let validMoves = []; 
-let isGameOver = false; // Esta variable controla que nadie pueda mover si está en true
+let isGameOver = false; // Controla el bloqueo total de movimientos
 
 let currentGameMoves = []; 
 let matchHistory = JSON.parse(localStorage.getItem('chess_match_history')) || [];
@@ -60,7 +60,7 @@ function iniciarPingAutomatico() {
     }, 30000); 
 }
 
-// ====== CONTROLADORES DE EVENTOS WEBSOCKET (RECEPCIÓN RIVAL) ======
+// ====== CONTROLADORES DE EVENTOS WEBSOCKET ======
 socket.onopen = function() {
     turnIndicator.innerText = "Conectado. Buscando oponente..."; 
     turnIndicator.style.backgroundColor = '#1e3a8a'; 
@@ -90,18 +90,25 @@ socket.onmessage = function(event) {
         executeMove(data.fromRow, data.fromCol, data.toRow, data.toCol, false, data.promotedPiece || null);
     }
 
-    // ALERTA DE RENDICIÓN: El rival recibe la notificación de que te rendiste
+    // RECEPCIÓN DE RENDICIÓN EN EL RIVAL
     if (data.type === 'resign') { 
-        alert("El oponente se ha rendido"); 
-        finalizarPorRendicion(data.color || data.colorQueAbandona); 
+        const colorRendido = data.color || data.colorQueAbandona;
+        // Dinámico: Si el rival que se rinde es Blanco, el mensaje va hacia las Negras y viceversa
+        if (colorRendido === 'W') {
+            alert("El oponente de las Blancas se rindió, eres el ganador.");
+        } else {
+            alert("El oponente de las Negras se rindió, eres el ganador.");
+        }
+        finalizarPorRendicion(colorRendido); 
     }
 
-    // ALERTA DE TABLAS: El oponente recibe tu propuesta en tiempo real
+    // RECEPCIÓN DE OFERTA DE TABLAS EN EL RIVAL
     if (data.type === 'offer_draw') { 
-        recibirOfertaTablas(); 
+        const solicitante = data.sender || data.color;
+        recibirOfertaTablas(solicitante); 
     }
 
-    // ALERTA DE TABLAS ACEPTADAS: Si tú ofreciste tablas y el rival aceptó, se ejecuta esto en tu pantalla
+    // RECEPCIÓN DE TABLAS ACEPTADAS
     if (data.type === 'accept_draw') { 
         alert("¡Oferta de tablas aceptada! Empate.");
         finalizarPorTablas(); 
@@ -129,16 +136,14 @@ socket.onclose = function() {
     turnIndicator.style.backgroundColor = '#b91c1c'; 
 };
 
-// ====== MANIPULACIÓN DE BOTONES DE ACCIÓN (RENDICIÓN Y TABLAS) ======
+// ====== MANIPULACIÓN DE BOTONES DE ACCIÓN GRÁFICA ======
 resignBtn.addEventListener('click', () => {
     if (!partidaIniciada || isGameOver) return; 
     
     if (confirm("¿Estás seguro de que quieres rendirte?")) { 
-        // 1. Enviamos el evento al servidor para que el oponente reciba la alerta
         if (socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({ type: "resign", color: miColor, colorQueAbandona: miColor })); 
         }
-        // 2. Bloqueamos nuestra pantalla local de inmediato
         finalizarPorRendicion(miColor); 
     }
 });
@@ -152,9 +157,10 @@ drawBtn.addEventListener('click', () => {
     }
 });
 
+// BOTÓN PARA LIMPIAR EL HISTORIAL DE PARTIDAS TOTALMENTE
 if (clearHistoryBtn) {
     clearHistoryBtn.addEventListener('click', () => {
-        if (confirm("¿Seguro que deseas borrar todo el historial de partidas?")) {
+        if (confirm("¿Seguro que deseas borrar todo el historial de partidas guardadas?")) {
             localStorage.removeItem('chess_match_history');
             matchHistory = [];
             renderHistoryLog();
@@ -165,45 +171,44 @@ if (clearHistoryBtn) {
 
 // ====== LÓGICA DE CIERRE DE PARTIDAS (CONGELACIÓN DE MOVIMIENTOS) ======
 function finalizarPorRendicion(colorQueAbandona) {
-    isGameOver = true;          // Bloquea por completo cualquier click en el tablero
-    partidaIniciada = false;    // Apaga el estado de juego activo
-    resignBtn.disabled = true;  // Desactiva los botones de acción
+    isGameOver = true;          // Detiene cualquier interacción con las casillas
+    partidaIniciada = false; 
+    resignBtn.disabled = true; 
     drawBtn.disabled = true; 
     
     const ganadorText = colorQueAbandona === 'W' ? 'Negras ⬛' : 'Blancas ⬜'; 
-    turnIndicator.innerHTML = `🏳️ El oponente se ha rendido. Ganan las ${ganadorText}`; 
+    turnIndicator.innerHTML = `🏳️ Partida finalizada. Ganan las ${ganadorText}`; 
     turnIndicator.style.backgroundColor = '#b91c1c'; 
     
-    // Solo recalculamos el Elo si fue una victoria por juego real, no por abandono mutuo/red si así lo deseas
     if (miColor === 'W') calcularNuevoElo(colorQueAbandona === 'W' ? 'B' : 'W', ganadorText);
     drawBoard(); 
 }
 
-function recibirOfertaTablas() {
-    // Ventana emergente nativa para aceptar o declinar
-    if (confirm("Tu oponente ofrece Tablas (Empate). ¿Aceptas la oferta?")) { 
+function recibirOfertaTablas(quienOfrece) {
+    const textoOponente = quienOfrece === 'W' ? 'las Blancas' : 'las Negras';
+    
+    // Alerta interactiva de aceptación o declinación directa
+    if (confirm(`El oponente de ${textoOponente} ofrece tablas. ¿Deseas aceptar el ofrecimiento?`)) { 
         if (socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({ type: "accept_draw" })); 
         }
         alert("Has aceptado las tablas. Partida terminada en Empate.");
         finalizarPorTablas(); 
     } else {
-        // Opcional: Podrías mandar un mensaje de "tablas_declinadas" al servidor si tu backend lo requiere
-        alert("Has rechazado la oferta de tablas. La partida continúa.");
+        alert("Has declinado el ofrecimiento. La partida continúa.");
     }
 }
 
 function finalizarPorTablas() {
-    isGameOver = true;          // Bloquea por completo cualquier click en el tablero
-    partidaIniciada = false;    // Apaga el estado de juego activo
-    resignBtn.disabled = true;  // Desactiva botones
+    isGameOver = true;          // Congela el tablero por completo
+    partidaIniciada = false; 
+    resignBtn.disabled = true; 
     drawBtn.disabled = true; 
     
-    turnIndicator.innerHTML = `🤝 Tablas - Empate`; 
+    turnIndicator.innerHTML = `🤝 Tablas - Empate Acordado`; 
     turnIndicator.style.backgroundColor = '#4b5563'; 
     
-    // NOTA: No se llama a calcularNuevoElo para evitar que sume o reste puntos a los jugadores.
-    // Simplemente guardamos la constancia visual del empate en el historial de abajo sin tocar los Elos locales:
+    // Guardamos la constancia en el historial local sin alterar el Elo (Pasan intactos)
     const gameRecord = { 
         winner: "Tablas (Empate)", 
         date: new Date().toLocaleString(), 
@@ -355,7 +360,6 @@ function drawBoard() {
                 square.appendChild(pieceElement); 
             }
             
-            // Inyección prioritaria de color rojo si el rey está en jaque directo
             if (whiteKingChecked && whiteKingPos && whiteKingPos.row === row && whiteKingPos.col === col) {
                 square.style.backgroundColor = '#b91c1c'; 
             }
@@ -380,7 +384,7 @@ function drawBoard() {
 }
 
 function handleSquareClick(event) {
-    if (isGameOver || !partidaIniciada) return; // Si isGameOver es true, impide interactuar
+    if (isGameOver || !partidaIniciada) return; 
     if (currentTurn !== miColor) return; 
 
     const square = event.currentTarget; 
@@ -542,7 +546,7 @@ function getRawMoves(row, col, piece) {
         case 'c': 
             [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]].forEach(m => {
                 const nR = row + m[0], nC = col + m[1]; 
-                if (nR >= 0 && nR < 8 && nC >= 0 && nC < 8) moves.push({ row: nR, col: m[1] }); // corrección menor de índice estricto
+                if (nR >= 0 && nR < 8 && nC >= 0 && nC < 8) moves.push({ row: nR, col: nC }); 
             });
             break;
     }
