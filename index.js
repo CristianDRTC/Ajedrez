@@ -1,12 +1,15 @@
 const boardElement = document.getElementById('chessboard');
 const wrapper = document.querySelector('.board-wrapper');
 const turnIndicator = document.getElementById('turn-indicator');
-const eloPanel = document.getElementById('elo-panel');
-const restartBtn = document.getElementById('restart-btn');
+const eloWhite = document.getElementById('elo-white');
+const eloBlack = document.getElementById('elo-black');
 const movesLog = document.getElementById('moves-log');
 const gamesHistoryLog = document.getElementById('games-history-log');
 
-// Conexión WebSocket al Backend con la URL exacta en minúsculas
+const drawBtn = document.getElementById('draw-btn');
+const resignBtn = document.getElementById('resign-btn');
+
+// Conexión WebSocket al Backend
 const socket = new WebSocket('wss://ajedrez-backend-fyjz.onrender.com');
 
 let miColor = null; 
@@ -44,13 +47,25 @@ const unicodePieces = {
     '': ''
 };
 
+// Sistema Heartbeat / Ping para Render
+function iniciarPingAutomatico() {
+    setInterval(() => {
+        if (socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ type: "ping" }));
+        }
+    }, 30000); 
+}
+
 socket.onopen = function() {
-    turnIndicator.innerText = "Conectado. Buscando partida...";
+    turnIndicator.innerText = "Conectado. Buscando oponente...";
     turnIndicator.style.backgroundColor = '#1e3a8a';
+    iniciarPingAutomatico();
 };
 
 socket.onmessage = function(event) {
     const data = JSON.parse(event.data);
+
+    if (data.type === 'pong') return;
 
     if (data.type === 'init') {
         miColor = data.color;
@@ -60,20 +75,29 @@ socket.onmessage = function(event) {
     }
     if (data.type === 'start') {
         partidaIniciada = true;
-        restartBtn.disabled = false;
+        isGameOver = false;
+        resignBtn.disabled = false;
+        drawBtn.disabled = false;
         actualizarBannerTurno();
         drawBoard();
     }
     if (data.type === 'move') {
         executeMove(data.fromRow, data.fromCol, data.toRow, data.toCol, false);
     }
-    if (data.type === 'restart') {
-        resetGameLocal();
+    if (data.type === 'resign') {
+        finalizarPorRendicion(data.colorQueAbandona);
+    }
+    if (data.type === 'offer_draw') {
+        recibirOfertaTablas();
+    }
+    if (data.type === 'accept_draw') {
+        finalizarPorTablas();
     }
     if (data.type === 'opponent_left') {
         partidaIniciada = false;
-        restartBtn.disabled = true;
-        turnIndicator.innerText = "El rival abandonó la sala. Esperando oponente...";
+        resignBtn.disabled = true;
+        drawBtn.disabled = true;
+        turnIndicator.innerText = "El rival abandonó la sala.";
         turnIndicator.style.backgroundColor = '#b45309';
     }
     if (data.type === 'error') {
@@ -82,23 +106,65 @@ socket.onmessage = function(event) {
 };
 
 socket.onerror = function() {
-    turnIndicator.innerText = "Modo Local / Conectando al servidor...";
+    turnIndicator.innerText = "Modo Local / Conectando...";
     turnIndicator.style.backgroundColor = '#b91c1c';
 };
 
 socket.onclose = function() {
-    turnIndicator.innerText = "Servidor Desconectado / Reintentando...";
+    turnIndicator.innerText = "Desconectado. Reintentando...";
     turnIndicator.style.backgroundColor = '#b91c1c';
 };
+
+resignBtn.addEventListener('click', () => {
+    if (!partidaIniciada || isGameOver) return;
+    if (confirm("¿Estás seguro de que quieres rendirte?")) {
+        socket.send(JSON.stringify({ type: "resign", color: miColor }));
+        finalizarPorRendicion(miColor);
+    }
+});
+
+drawBtn.addEventListener('click', () => {
+    if (!partidaIniciada || isGameOver) return;
+    alert("Oferta de tablas enviada a tu rival.");
+    socket.send(JSON.stringify({ type: "offer_draw", sender: miColor }));
+});
+
+function finalizarPorRendicion(colorQueAbandona) {
+    isGameOver = true;
+    partidaIniciada = false;
+    resignBtn.disabled = true;
+    drawBtn.disabled = true;
+    const ganadorText = colorQueAbandona === 'W' ? 'Negras' : 'Blancas';
+    turnIndicator.innerHTML = `🏳️ Rendición. Ganan las ${ganadorText}`;
+    turnIndicator.style.backgroundColor = '#b91c1c';
+    if (miColor === 'W') calcularNuevoElo(colorQueAbandona === 'W' ? 'B' : 'W', ganadorText);
+}
+
+function recibirOfertaTablas() {
+    if (confirm("Tu oponente ofrece Tablas. ¿Aceptas?")) {
+        socket.send(JSON.stringify({ type: "accept_draw" }));
+        finalizarPorTablas();
+    }
+}
+
+function finalizarPorTablas() {
+    isGameOver = true;
+    partidaIniciada = false;
+    resignBtn.disabled = true;
+    drawBtn.disabled = true;
+    turnIndicator.innerHTML = `🤝 Empate por Tablas`;
+    turnIndicator.style.backgroundColor = '#4b5563';
+    if (miColor === 'W') calcularNuevoElo('D', 'Empate');
+}
 
 function actualizarBannerTurno() {
     if (isGameOver) return;
     if (currentTurn === miColor) {
         turnIndicator.innerText = "¡Tu turno!";
-        turnIndicator.style.backgroundColor = '#1e3a8a';
+        turnIndicator.style.backgroundColor = '#47a047'; 
     } else {
         turnIndicator.innerText = "Turno del oponente...";
-        turnIndicator.style.backgroundColor = '#475569';
+        turnIndicator.style.backgroundColor = '#383633';
     }
 }
 
@@ -109,10 +175,8 @@ function getAlgebraicCoords(row, col) {
 }
 
 function updateEloDisplay() {
-    eloPanel.innerHTML = `
-        <span>⬜ Blancas: ${eloBlancas}</span>
-        <span>⬛ Negras: ${eloNegras}</span>
-    `;
+    eloWhite.innerText = eloBlancas;
+    eloBlack.innerText = eloNegras;
 }
 
 function switchTab(tabName) {
@@ -133,17 +197,13 @@ function switchTab(tabName) {
 function renderMovesLog() {
     movesLog.innerHTML = ''; 
     if (currentGameMoves.length === 0) {
-        movesLog.innerHTML = '<div style="color:#64748b; padding:10px;">No hay movimientos aún.</div>';
+        movesLog.innerHTML = '<div style="color:#bababa; padding:12px; font-size:13px;">No hay movimientos.</div>';
         return;
     }
     currentGameMoves.forEach((move, idx) => {
         const row = document.createElement('div');
         row.classList.add('move-row');
-        row.innerHTML = `
-            <span class="move-index">${idx + 1}.</span>
-            <span>${move.w}</span>
-            <span>${move.b || '...'}</span>
-        `;
+        row.innerHTML = `<span class="move-index">${idx + 1}.</span><span>${move.w}</span><span>${move.b || '...'}</span>`;
         movesLog.appendChild(row);
     });
     movesLog.scrollTop = movesLog.scrollHeight;
@@ -152,21 +212,18 @@ function renderMovesLog() {
 function renderHistoryLog() {
     gamesHistoryLog.innerHTML = ''; 
     if (matchHistory.length === 0) {
-        gamesHistoryLog.innerHTML = '<div style="color:#64748b; padding:10px;">No hay partidas guardadas.</div>';
+        gamesHistoryLog.innerHTML = '<div style="color:#bababa; padding:12px; font-size:13px;">Historial vacío.</div>';
         return;
     }
     matchHistory.slice().reverse().forEach(game => {
         const item = document.createElement('div');
         item.classList.add('history-item');
-        item.innerHTML = `
-            <strong>🏆 Ganó: ${game.winner}</strong><br>
-            <span style="color:#64748b; font-size:11px;">${game.date}</span><br>
-            Elo: B(${game.oldW}➔${game.newW}) | N(${game.oldB}➔${game.newB})
-        `;
+        item.innerHTML = `<strong>🏆 ${game.winner}</strong><br><span style="color:#bababa; font-size:11px;">${game.date}</span><br>Elo: B(${game.oldW}➔${game.newW}) | N(${game.oldB}➔${game.newB})`;
         gamesHistoryLog.appendChild(item);
     });
 }
 
+// Generación Dinámica Completa de Números (1-8) y Letras (A-H)
 function createCoordinates() {
     if (document.querySelector('.board-wrapper-numbers-left')) return;
 
@@ -175,13 +232,30 @@ function createCoordinates() {
     leftNumbers.classList.add('board-wrapper-numbers-left');
     rightNumbers.classList.add('board-wrapper-numbers-right');
 
+    const bottomLetters = document.createElement('div');
+    const topLetters = document.createElement('div');
+    bottomLetters.classList.add('board-wrapper-letters-bottom');
+    topLetters.classList.add('board-wrapper-letters-top');
+
+    // Crear números verticales
     for (let i = 8; i >= 1; i--) {
-        const num1 = document.createElement('div'); const num2 = document.createElement('div');
-        num1.innerText = i; num2.innerText = i;
-        leftNumbers.appendChild(num1); rightNumbers.appendChild(num2);
+        const n1 = document.createElement('div'); n1.innerText = i;
+        const n2 = document.createElement('div'); n2.innerText = i;
+        leftNumbers.appendChild(n1); rightNumbers.appendChild(n2);
     }
+
+    // Crear letras horizontales
+    const lettersArr = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+    lettersArr.forEach(l => {
+        const l1 = document.createElement('div'); l1.innerText = l;
+        const l2 = document.createElement('div'); l2.innerText = l;
+        bottomLetters.appendChild(l1); topLetters.appendChild(l2);
+    });
+
     wrapper.appendChild(leftNumbers);
     wrapper.appendChild(rightNumbers);
+    wrapper.appendChild(bottomLetters);
+    wrapper.appendChild(topLetters);
 }
 
 function getPieceColor(piece) {
@@ -192,12 +266,13 @@ function getPieceColor(piece) {
 function drawBoard() {
     boardElement.innerHTML = '';
     
+    // Invertir visualmente el tablero si juegas con negras
     if (miColor === 'B') {
         boardElement.style.transform = 'rotate(180deg)';
-        document.querySelectorAll('.board-wrapper-numbers-left, .board-wrapper-numbers-right').forEach(el => el.style.transform = 'rotate(180deg)');
+        document.querySelectorAll('.board-wrapper div[class^="board-wrapper-"]').forEach(el => el.style.transform = 'rotate(180deg)');
     } else {
         boardElement.style.transform = 'rotate(0deg)';
-        document.querySelectorAll('.board-wrapper-numbers-left, .board-wrapper-numbers-right').forEach(el => el.style.transform = 'rotate(0deg)');
+        document.querySelectorAll('.board-wrapper div[class^="board-wrapper-"]').forEach(el => el.style.transform = 'rotate(0deg)');
     }
 
     const whiteKingChecked = isKingInCheck('W');
@@ -218,9 +293,7 @@ function drawBoard() {
                 const pieceElement = document.createElement('span');
                 pieceElement.innerText = unicodePieces[piece];
                 pieceElement.classList.add(getPieceColor(piece) === 'W' ? 'piece-white' : 'piece-black');
-                
                 if (miColor === 'B') pieceElement.style.transform = 'rotate(180deg)';
-                
                 square.appendChild(pieceElement);
             }
             
@@ -228,14 +301,7 @@ function drawBoard() {
             if (blackKingChecked && blackKingPos && blackKingPos.row === row && blackKingPos.col === col) square.style.backgroundColor = '#fca5a5';
 
             if (selectedSquare && selectedSquare.row === row && selectedSquare.col === col) square.classList.add('selected');
-
-            if (validMoves.some(m => m.row === row && m.col === col)) {
-                if (piece && getPieceColor(piece) !== currentTurn) {
-                    square.style.backgroundColor = '#a1a1aa'; 
-                } else {
-                    square.classList.add('suggested');
-                }
-            }
+            if (validMoves.some(m => m.row === row && m.col === col)) square.classList.add('suggested');
             
             square.addEventListener('click', handleSquareClick);
             boardElement.appendChild(square);
@@ -244,8 +310,8 @@ function drawBoard() {
 }
 
 function handleSquareClick(event) {
-    if (isGameOver) return;
-    if (!partidaIniciada && socket.readyState === WebSocket.OPEN) return; 
+    if (isGameOver || !partidaIniciada) return;
+    if (currentTurn !== miColor) return; 
 
     const square = event.currentTarget;
     const row = parseInt(square.dataset.row);
@@ -311,22 +377,28 @@ function executeMove(fromRow, fromCol, toRow, toCol, enviarServidor = true) {
 
     if (activeKingInCheck && !hasLegalMovesLeft) {
         isGameOver = true;
+        partidaIniciada = false;
+        resignBtn.disabled = true;
+        drawBtn.disabled = true;
         const ganadorText = currentTurn === 'W' ? 'Negras' : 'Blancas';
         turnIndicator.innerHTML = `🏆 ¡Jaque Mate! Ganan las ${ganadorText}`;
-        turnIndicator.style.backgroundColor = '#15803d';
-        
-        calcularNuevoElo(currentTurn === 'W' ? 'B' : 'W', ganadorText);
+        turnIndicator.style.backgroundColor = '#47a047';
+        if (miColor === 'W') calcularNuevoElo(currentTurn === 'W' ? 'B' : 'W', ganadorText);
     }
 }
 
 function calcularNuevoElo(ganadorKey, ganadorTexto) {
     const expectativaW = 1 / (1 + Math.pow(10, (eloNegras - eloBlancas) / 400));
     const expectativaB = 1 / (1 + Math.pow(10, (eloBlancas - eloNegras) / 400));
-
     const oldW = eloBlancas; const oldB = eloNegras;
 
-    eloBlancas = Math.round(eloBlancas + FACTOR_K * ((ganadorKey === 'W' ? 1 : 0) - expectativaW));
-    eloNegras = Math.round(eloNegras + FACTOR_K * ((ganadorKey === 'B' ? 1 : 0) - expectativaB));
+    if (ganadorKey === 'D') {
+        eloBlancas = Math.round(eloBlancas + FACTOR_K * (0.5 - expectativaW));
+        eloNegras = Math.round(eloNegras + FACTOR_K * (0.5 - expectativaB));
+    } else {
+        eloBlancas = Math.round(eloBlancas + FACTOR_K * ((ganadorKey === 'W' ? 1 : 0) - expectativaW));
+        eloNegras = Math.round(eloNegras + FACTOR_K * ((ganadorKey === 'B' ? 1 : 0) - expectativaB));
+    }
 
     localStorage.setItem('elo_blancas', eloBlancas);
     localStorage.setItem('elo_negras', eloNegras);
@@ -336,28 +408,6 @@ function calcularNuevoElo(ganadorKey, ganadorTexto) {
     matchHistory.push(gameRecord);
     localStorage.setItem('chess_match_history', JSON.stringify(matchHistory));
     renderHistoryLog();
-}
-
-restartBtn.addEventListener('click', () => {
-    if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: "restart" }));
-    } else {
-        resetGameLocal();
-    }
-});
-
-function resetGameLocal() {
-    boardState = [
-        ['t', 'c', 'a', 'q', 'k', 'a', 'c', 't'], ['p', 'p', 'p', 'p', 'p', 'p', 'p', 'p'],
-        ['', '', '', '', '', '', '', ''], ['', '', '', '', '', '', '', ''],
-        ['', '', '', '', '', '', '', ''], ['', '', '', '', '', '', '', ''],
-        ['P', 'P', 'P', 'P', 'P', 'P', 'P', 'P'], ['T', 'C', 'A', 'Q', 'K', 'A', 'C', 'T']
-    ];
-    currentTurn = 'W'; selectedSquare = null; validMoves = []; isGameOver = false; currentGameMoves = [];
-    movedPieces = { 'W_king': false, 'W_rook_a': false, 'W_rook_h': false, 'B_king': false, 'B_rook_a': false, 'B_rook_h': false };
-    actualizarBannerTurno();
-    renderMovesLog(); 
-    drawBoard();
 }
 
 function findKing(color) {
@@ -474,8 +524,9 @@ function getLineMoves(row, col, rowDir, colDir, color) {
     return lm;
 }
 
+// Inicialización forzada desde el arranque
 createCoordinates();
 updateEloDisplay();
 renderMovesLog();
 renderHistoryLog();
-drawBoard();
+drawBoard(); // <-- Forzamos el render inicial para que nunca esté invisible
