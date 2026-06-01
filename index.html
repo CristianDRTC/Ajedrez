@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ajedrez Multijugador en Línea</title>
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+
+    <div class="game-container">
+        <div class="board-container">
+            <div class="board-wrapper">
+                <div id="chessboard"></div>
+            </div>
+        </div>
+
+        <div class="control-panel">
+            
+            <div id="turn-indicator" class="status-banner">
+                Conectando al servidor...
+            </div>
+
+            <div class="elo-container">
+                <div class="elo-box white-elo">
+                    <span>⚪ Blancas ELO:</span>
+                    <strong id="elo-white">1000</strong>
+                </div>
+                <div class="elo-box black-elo">
+                    <span>⚫ Negras ELO:</span>
+                    <strong id="elo-black">1000</strong>
+                </div>
+            </div>
+
+            <div class="actions-container">
+                <button id="draw-btn" class="btn-action">🤝 Ofrecer Tablas</button>
+                <button id="resign-btn" class="btn-action btn-danger" disabled>🏳️ Rendirse</button>
+                <button id="rematch-btn" class="btn-action btn-primary">🔄 Pedir Revancha</button>
+            </div>
+
+            <div class="tabs-container">
+                <button id="tab-moves-btn" class="tab-button active" onclick="switchTab('moves')">Movimientos</button>
+                <button id="tab-history-btn" class="tab-button" onclick="switchTab('history')">Historial de Partidas</button>
+            </div>
+
+            <div class="tabs-content-wrapper">
+                <div id="tab-moves" class="tab-content active">
+                    <div id="moves-log" class="log-box">
+                        </div>
+                </div>
+
+                <div id="tab-history" class="tab-content">
+                    <div id="games-history-log" class="log-box">
+                        </div>
+                    <button id="clear-history-btn" class="btn-clear-history">🗑️ Limpiar Historial Total</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="index.js"></script>
+</body>
+</html>
