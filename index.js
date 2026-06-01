@@ -9,8 +9,6 @@ const gamesHistoryLog = document.getElementById('games-history-log');
 
 const drawBtn = document.getElementById('draw-btn'); 
 const resignBtn = document.getElementById('resign-btn'); 
-
-// NUEVO: Botón para borrar historial (Asegúrate de tener <button id="clear-history-btn">...</button> en tu HTML)
 const clearHistoryBtn = document.getElementById('clear-history-btn');
 
 // ====== CONFIGURACIÓN Y ESTADO DE LA RED (WEBSOCKET) ======
@@ -89,19 +87,19 @@ socket.onmessage = function(event) {
         drawBoard(); 
     }
     if (data.type === 'move') { 
-        // Ejecuta el movimiento remoto y procesa si hubo pieza promocionada (reclamo)
+        // FIX: Se recibe la pieza promocionada exacta del rival ('promotedPiece') para que no se vea como peón remoto
         executeMove(data.fromRow, data.fromCol, data.toRow, data.toCol, false, data.promotedPiece || null);
     }
     if (data.type === 'resign') { 
-        // FIX: Cuando llega la notificación de rendición del servidor, finaliza la partida para ambos
-        finalizarPorRendicion(data.color); 
+        // FIX: Sincroniza la rendición usando el color correcto que venga del servidor
+        finalizarPorRendicion(data.color || data.colorQueAbandona); 
     }
     if (data.type === 'offer_draw') { 
-        // FIX: El oponente ve de verdad la alerta en su pantalla para aceptar o declinar
+        // FIX: El oponente recibe la oferta de tablas en tiempo real
         recibirOfertaTablas(); 
     }
     if (data.type === 'accept_draw') { 
-        // FIX: Si el rival aceptó la oferta, finaliza el juego por tablas de forma sincronizada
+        // FIX: Sincroniza el empate mutuo en ambas pantallas
         finalizarPorTablas(); 
     }
     if (data.type === 'opponent_left') { 
@@ -126,12 +124,12 @@ socket.onclose = function() {
     turnIndicator.style.backgroundColor = '#b91c1c'; 
 };
 
-// ====== MANIPULACIÓN DE BOTONES DE ACCIÓN (RENDICIÓN, TABLAS Y BORRAR) ======
+// ====== MANIPULACIÓN DE BOTONES DE ACCIÓN ======
 resignBtn.addEventListener('click', () => {
     if (!partidaIniciada || isGameOver) return; 
     if (confirm("¿Estás seguro de que quieres rendirte?")) { 
-        // Envía la acción de rendición al servidor para que el rival la reciba
-        socket.send(JSON.stringify({ type: "resign", color: miColor })); 
+        // FIX: Enviamos el formato dual de propiedad de color para asegurar compatibilidad con tu backend
+        socket.send(JSON.stringify({ type: "resign", color: miColor, colorQueAbandona: miColor })); 
         finalizarPorRendicion(miColor); 
     }
 });
@@ -139,11 +137,9 @@ resignBtn.addEventListener('click', () => {
 drawBtn.addEventListener('click', () => {
     if (!partidaIniciada || isGameOver) return; 
     alert("Oferta de tablas enviada a tu rival."); 
-    // Envía la oferta al servidor para que se le muestre al oponente en tiempo real
-    socket.send(JSON.stringify({ type: "offer_draw", sender: miColor })); 
+    socket.send(JSON.stringify({ type: "offer_draw", sender: miColor, color: miColor })); 
 });
 
-// NUEVO: Evento para borrar el historial de partidas por completo
 if (clearHistoryBtn) {
     clearHistoryBtn.addEventListener('click', () => {
         if (confirm("¿Seguro que deseas borrar todo el historial de partidas?")) {
@@ -165,7 +161,7 @@ function finalizarPorRendicion(colorQueAbandona) {
     turnIndicator.innerHTML = `🏳️ Rendición. Ganan las ${ganadorText}`; 
     turnIndicator.style.backgroundColor = '#b91c1c'; 
     if (miColor === 'W') calcularNuevoElo(colorQueAbandona === 'W' ? 'B' : 'W', ganadorText);
-    drawBoard(); // Redibuja para limpiar selecciones
+    drawBoard(); 
 }
 
 function recibirOfertaTablas() {
@@ -183,7 +179,7 @@ function finalizarPorTablas() {
     turnIndicator.innerHTML = `🤝 Empate por Tablas`; 
     turnIndicator.style.backgroundColor = '#4b5563'; 
     if (miColor === 'W') calcularNuevoElo('D', 'Empate'); 
-    drawBoard(); // Redibuja el tablero al finalizar
+    drawBoard(); 
 }
 
 // ====== PESTAÑAS Y ADAPTACIÓN VISUAL ======
@@ -285,7 +281,6 @@ function createCoordinates() {
     wrapper.appendChild(topLetters);
 }
 
-// ====== REGLAS DE COLOR ======
 function getPieceColor(piece) {
     if (!piece) return null; 
     return piece === piece.toUpperCase() ? 'W' : 'B'; 
@@ -303,7 +298,7 @@ function drawBoard() {
         document.querySelectorAll('.board-wrapper div[class^="board-wrapper-"]').forEach(el => el.style.transform = 'rotate(0deg)');
     }
 
-    // Análisis de Jaques activos para pintar de rojo la casilla del Rey
+    // FIX: Ejecutamos el análisis de jaque en cada renderizado de forma forzada
     const whiteKingChecked = isKingInCheck('W'); 
     const blackKingChecked = isKingInCheck('B'); 
     const whiteKingPos = findKing('W'); 
@@ -326,7 +321,7 @@ function drawBoard() {
                 square.appendChild(pieceElement); 
             }
             
-            // FIX: Aplicación prioritaria del color rojo (#b91c1c) cuando el rey está en jaque directo
+            // FIX EXCLUSIVO: Si el rey está en jaque, se le clava el color rojo #b91c1c obligatoriamente
             if (whiteKingChecked && whiteKingPos && whiteKingPos.row === row && whiteKingPos.col === col) {
                 square.style.backgroundColor = '#b91c1c'; 
             }
@@ -336,10 +331,8 @@ function drawBoard() {
 
             if (selectedSquare && selectedSquare.row === row && selectedSquare.col === col) square.classList.add('selected');
             
-            // Lógica de Sombras de Capturas y Movimientos sugeridos
             if (validMoves.some(m => m.row === row && m.col === col)) {
                 if (piece && getPieceColor(piece) !== currentTurn) {
-                    // Acción solicitada: Oscurece un poco la casilla si se puede comer la ficha enemiga
                     square.style.filter = 'brightness(0.55)'; 
                 } else {
                     square.classList.add('suggested'); 
@@ -381,13 +374,13 @@ function handleSquareClick(event) {
 // ====== EJECUCIÓN FÍSICA DEL MOVIMIENTO MÓDULO INTERNO ======
 function executeMove(fromRow, fromCol, toRow, toCol, enviarServidor = true, piezaPromocionadaRemota = null) {
     let piece = boardState[fromRow][fromCol]; 
-    if (!piece) return; // Validación de seguridad básica
+    if (!piece) return; 
 
     const type = piece.toLowerCase(); 
     const color = getPieceColor(piece); 
     let finalPiece = piece; 
 
-    // RECLAMO DE PIEZA (CORONACIÓN): Se activa exactamente al pisar la fila final del enemigo (0 o 7)
+    // 1. PROCESAR CORONACIÓN LOCAL O REMOTA PRIMERO
     if (type === 'p' && (toRow === 0 || toRow === 7)) {
         if (enviarServidor) { 
             let seleccion = prompt("¡Peón coronado! Elige tu pieza de reclamo:\n Q = Reina (Queen), R = Torre (Rook), B = Alfil (Bishop), N = Caballo (Knight)", "Q");
@@ -400,6 +393,11 @@ function executeMove(fromRow, fromCol, toRow, toCol, enviarServidor = true, piez
         }
     }
     
+    // 2. ACTUALIZAR LA MATRIZ DE ESTADO INMEDIATAMENTE (Para que el servidor se lleve la pieza correcta)
+    boardState[toRow][toCol] = finalPiece;
+    boardState[fromRow][fromCol] = '';
+
+    // 3. ENVIAR LOS DATOS AL SERVIDOR (Ahora sí con la pieza final mutada para que el rival la pinte como reina)
     if (enviarServidor && socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ 
             type: "move", 
@@ -421,7 +419,6 @@ function executeMove(fromRow, fromCol, toRow, toCol, enviarServidor = true, piez
     }
     renderMovesLog(); 
 
-    // Enroques mecánicos automatizados
     if (type === 'k' && Math.abs(toCol - fromCol) === 2) { 
         if (toCol === 6) { 
             boardState[toRow][5] = boardState[toRow][7]; boardState[toRow][7] = ''; 
@@ -437,9 +434,6 @@ function executeMove(fromRow, fromCol, toRow, toCol, enviarServidor = true, piez
     if (type === 't' && fromRow === 0 && fromCol === 0) movedPieces['B_rook_a'] = true; 
     if (type === 't' && fromRow === 0 && fromCol === 7) movedPieces['B_rook_h'] = true; 
 
-    // Realiza el cambio físico en la matriz
-    boardState[toRow][toCol] = finalPiece;
-    boardState[fromRow][fromCol] = '';
     selectedSquare = null; 
     validMoves = []; 
     
@@ -447,7 +441,6 @@ function executeMove(fromRow, fromCol, toRow, toCol, enviarServidor = true, piez
     actualizarBannerTurno(); 
     drawBoard(); 
 
-    // Control de Jaque Mate automático al heredar turno
     const activeKingInCheck = isKingInCheck(currentTurn); 
     const hasLegalMovesLeft = playerHasLegalMoves(currentTurn); 
 
@@ -547,7 +540,7 @@ function playerHasLegalMoves(color) {
     return false; 
 }
 
-// ====== FILTRADOR ABSOLUTO DE JUGADAS LEGALES DEL PEÓN Y PIEZAS ======
+// ====== FILTRADOR ABSOLUTO DE JUGADAS LEGALES ======
 function calculateValidMoves(row, col, piece) {
     let moves = []; const type = piece.toLowerCase(); const color = getPieceColor(piece);
     const straightDirs = [[-1, 0], [1, 0], [0, -1], [0, 1]]; const diagDirs = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
@@ -555,7 +548,6 @@ function calculateValidMoves(row, col, piece) {
     switch (type) {
         case 'p': 
             const d = color === 'W' ? -1 : 1; 
-            // FIX: Ajuste en la verificación del avance lineal simple para permitir llegar sin bloqueos a la meta
             if (row + d >= 0 && row + d < 8 && boardState[row + d][col] === '') { 
                 moves.push({ row: row + d, col }); 
                 if (row === (color === 'W' ? 6 : 1) && boardState[row + d * 2][col] === '') {
@@ -601,7 +593,6 @@ function calculateValidMoves(row, col, piece) {
 
 function getLineMoves(row, col, rowDir, colDir, color) {
     const lm = []; let r = row + rowDir; let c = col + colDir; 
-    // FIX: Se corrigió la condición lógica estricta del bucle while para evitar saltos falsos o desbordes en los límites del tablero (0 a 7)
     while (r >= 0 && r < 8 && c >= 0 && c < 8) { 
         if (boardState[r][c] === '') { 
             lm.push({ row: r, col: c }); 
@@ -616,7 +607,7 @@ function getLineMoves(row, col, rowDir, colDir, color) {
     return lm; 
 }
 
-// ====== INICIALIZACIÓN AL ARRANQUE ======
+// ====== INICIALIZACIÓN ======
 createCoordinates(); 
 updateEloDisplay(); 
 renderMovesLog(); 
