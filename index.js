@@ -21,6 +21,7 @@ const clockWhite = document.getElementById('clock-white');
 const clockBlack = document.getElementById('clock-black');
 const resultWhite = document.getElementById('result-white');
 const resultBlack = document.getElementById('result-black');
+const spectatorNote = document.getElementById('spectator-note');
 
 let notificationQueue = Promise.resolve();
 
@@ -73,6 +74,7 @@ let currentTurn = 'W';
 let selectedSquare = null; 
 let validMoves = []; 
 let isGameOver = false; 
+let isSpectator = false;
 let roomClock = { W: 600, B: 600, turn: 'W', running: false, receivedAt: 0 };
 
 let currentGameMoves = []; 
@@ -126,6 +128,41 @@ socket.onmessage = async function(event) {
     if (data.type === 'pong') return; 
 
     if (data.type === 'init') { 
+        if (data.spectator) {
+            isSpectator = true;
+            miColor = null;
+            resetTableroLocal();
+            if (colorSelector) colorSelector.hidden = true;
+            if (spectatorNote) spectatorNote.hidden = false;
+            resignBtn.disabled = true;
+            drawBtn.disabled = true;
+            if (rematchBtn) rematchBtn.disabled = true;
+            data.moves.forEach(move => executeMove(
+                move.fromRow,
+                move.fromCol,
+                move.toRow,
+                move.toCol,
+                false,
+                move.promotedPiece || null
+            ));
+            currentTurn = data.turn || currentTurn;
+            roomClock = {
+                W: data.clocks.W,
+                B: data.clocks.B,
+                turn: data.turn,
+                running: data.running,
+                receivedAt: performance.now()
+            };
+            renderPlayerClocks();
+            isGameOver = data.gameOver;
+            partidaIniciada = false;
+            turnIndicator.innerText = data.gameOver
+                ? `Modo espectador · Partida finalizada${data.winner ? `. Ganaron las ${data.winner === 'W' ? 'Blancas' : 'Negras'}` : '.'}`
+                : data.running ? 'Modo espectador · Partida en curso' : 'Modo espectador · Esperando inicio';
+            if (data.gameOver) showPlayerResults(data.winner);
+            drawBoard();
+            return;
+        }
         if (data.needsColor) {
             if (colorSelector) colorSelector.hidden = false;
             turnIndicator.innerText = 'Elige con qué piezas quieres jugar.';
@@ -145,6 +182,17 @@ socket.onmessage = async function(event) {
         drawBoard(); 
     }
     if (data.type === 'start') { 
+        if (isSpectator) {
+            resetTableroLocal();
+            isGameOver = false;
+            partidaIniciada = false;
+            resignBtn.disabled = true;
+            drawBtn.disabled = true;
+            if (rematchBtn) rematchBtn.disabled = true;
+            turnIndicator.innerText = 'Modo espectador · Nueva partida en curso';
+            drawBoard();
+            return;
+        }
         partidaIniciada = true; 
         isGameOver = false; 
         clearPlayerResults();
@@ -175,6 +223,10 @@ socket.onmessage = async function(event) {
     // RECEPCIÓN DE RENDICIÓN
     if (data.type === 'resign') { 
         const colorRendido = data.color || data.colorQueAbandona;
+        if (isSpectator) {
+            finishRoomGame(colorRendido === 'W' ? 'B' : 'W', 'resign');
+            return;
+        }
         if (colorRendido === 'W') {
             await showNotification({ title: 'Partida finalizada', message: 'El oponente de las Blancas se rindió. Eres el ganador.' });
         } else {
@@ -185,6 +237,7 @@ socket.onmessage = async function(event) {
 
     // RECEPCIÓN DE OFERTA DE TABLAS
     if (data.type === 'offer_draw') { 
+        if (isSpectator) return;
         const solicitante = data.sender || data.color;
         recibirOfertaTablas(solicitante); 
     }
@@ -197,6 +250,7 @@ socket.onmessage = async function(event) {
 
     // RECEPCIÓN DE PROPUESTA DE REVANCHA
     if (data.type === 'rematch_offered') {
+        if (isSpectator) return;
         const textoRival = data.senderColor === 'W' ? 'Blancas' : 'Negras';
         if (await showNotification({ title: 'Propuesta de revancha', message: `El jugador de las ${textoRival} te ofrece una revancha.`, acceptText: 'Aceptar revancha', rejectText: 'Ahora no', tone: 'decision' })) {
             if (socket.readyState === WebSocket.OPEN) {
@@ -206,6 +260,10 @@ socket.onmessage = async function(event) {
     }
     
     if (data.type === 'opponent_left') { 
+        if (isSpectator) {
+            turnIndicator.innerText = 'Modo espectador · Un jugador se desconectó.';
+            return;
+        }
         partidaIniciada = false; 
         resignBtn.disabled = true; 
         drawBtn.disabled = true; 
@@ -281,7 +339,10 @@ function finishRoomGame(winner, reason) {
     drawBtn.disabled = true;
     roomClock.running = false;
     showPlayerResults(winner);
-    if (winner) {
+    if (isSpectator && winner) {
+        turnIndicator.innerText = `Modo espectador · Ganaron las ${winner === 'W' ? 'Blancas' : 'Negras'}`;
+        turnIndicator.style.backgroundColor = '#4b5563';
+    } else if (winner) {
         turnIndicator.innerText = winner === miColor ? '¡Ganaste la partida!' : 'Partida finalizada. Ganó tu oponente.';
         turnIndicator.style.backgroundColor = winner === miColor ? '#47a047' : '#b91c1c';
     } else if (reason === 'draw') {
@@ -542,14 +603,21 @@ function getPieceColor(piece) {
 function drawBoard() {
     if(!boardElement) return;
     boardElement.innerHTML = ''; 
-    
-    if (miColor === 'B') { 
+
+    const blackOrientation = miColor === 'B';
+    if (blackOrientation) {
         boardElement.style.transform = 'rotate(180deg)'; 
-        document.querySelectorAll('.board-wrapper div[class^="board-wrapper-"]').forEach(el => el.style.transform = 'rotate(180deg)');
-    } else { 
+    } else {
         boardElement.style.transform = 'rotate(0deg)'; 
-        document.querySelectorAll('.board-wrapper div[class^="board-wrapper-"]').forEach(el => el.style.transform = 'rotate(0deg)');
     }
+    const fileLabels = blackOrientation ? ['H', 'G', 'F', 'E', 'D', 'C', 'B', 'A'] : ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+    const rankLabels = blackOrientation ? ['1', '2', '3', '4', '5', '6', '7', '8'] : ['8', '7', '6', '5', '4', '3', '2', '1'];
+    document.querySelectorAll('.board-wrapper-letters-top, .board-wrapper-letters-bottom').forEach(labelRow => {
+        labelRow.querySelectorAll('div').forEach((label, index) => label.textContent = fileLabels[index]);
+    });
+    document.querySelectorAll('.board-wrapper-numbers-left, .board-wrapper-numbers-right').forEach(labelColumn => {
+        labelColumn.querySelectorAll('div').forEach((label, index) => label.textContent = rankLabels[index]);
+    });
 
     const whiteKingChecked = isKingInCheck('W'); 
     const blackKingChecked = isKingInCheck('B'); 
@@ -597,7 +665,7 @@ function drawBoard() {
 }
 
 function handleSquareClick(event) {
-    if (isGameOver || !partidaIniciada) return; 
+    if (isSpectator || isGameOver || !partidaIniciada) return;
     if (currentTurn !== miColor) return; 
 
     const square = event.currentTarget; 
@@ -691,7 +759,7 @@ function executeMove(fromRow, fromCol, toRow, toCol, enviarServidor = true, piez
     const activeKingInCheck = isKingInCheck(currentTurn); 
     const hasLegalMovesLeft = playerHasLegalMoves(currentTurn); 
 
-    if (activeKingInCheck && !hasLegalMovesLeft) { 
+    if (activeKingInCheck && !hasLegalMovesLeft && !isSpectator) {
         isGameOver = true; 
         partidaIniciada = false; 
         if(resignBtn) resignBtn.disabled = true; 

@@ -12,6 +12,17 @@
             <div class="board-wrapper">
                 <div id="chessboard"></div>
             </div>
+            <aside class="board-clock-panel" aria-label="Relojes de la partida">
+                <div class="board-clock white-clock-card">
+                    <span>Blancas</span>
+                    <strong id="clock-white" class="player-clock">10:00</strong>
+                </div>
+                <div class="board-clock black-clock-card">
+                    <span>Negras</span>
+                    <strong id="clock-black" class="player-clock">10:00</strong>
+                </div>
+                <p id="spectator-note" class="spectator-note" hidden>Modo espectador</p>
+            </aside>
         </div>
 
         <div class="control-panel">
@@ -29,13 +40,11 @@
                 <div class="elo-box white-elo">
                     <span>⚪ Blancas ELO:</span>
                     <strong id="elo-white">1000</strong>
-                    <span id="clock-white" class="player-clock">10:00</span>
                     <span id="result-white" class="player-result" hidden></span>
                 </div>
                 <div class="elo-box black-elo">
                     <span>⚫ Negras ELO:</span>
                     <strong id="elo-black">1000</strong>
-                    <span id="clock-black" class="player-clock">10:00</span>
                     <span id="result-black" class="player-result" hidden></span>
                 </div>
             </div>

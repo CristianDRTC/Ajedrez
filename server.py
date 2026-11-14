@@ -14,10 +14,14 @@ def create_room():
     return {
         "players": {},
         "pending": [],
+        "spectators": set(),
+        "moves": [],
         "clocks": {"W": INITIAL_CLOCK_SECONDS, "B": INITIAL_CLOCK_SECONDS},
         "turn": "W",
         "started": False,
         "game_over": False,
+        "winner": None,
+        "end_reason": None,
         "last_tick": time.monotonic(),
     }
 
@@ -27,8 +31,10 @@ async def send_message(websocket, payload):
     except websockets.exceptions.ConnectionClosed:
         pass
 
-async def broadcast_room(room, payload, exclude=None):
+async def broadcast_room(room, payload, exclude=None, include_spectators=True):
     recipients = set(room["players"].values()) | set(room["pending"])
+    if include_spectators:
+        recipients.update(room["spectators"])
     if exclude is not None:
         recipients.discard(exclude)
     await asyncio.gather(*(send_message(ws, payload) for ws in recipients))
@@ -38,6 +44,8 @@ async def end_room(room_id, room, winner, reason):
         return
     room["game_over"] = True
     room["started"] = False
+    room["winner"] = winner
+    room["end_reason"] = reason
     await broadcast_room(room, {
         "type": "game_over",
         "winner": winner,
@@ -68,6 +76,9 @@ async def start_room(room_id, room):
     room["turn"] = "W"
     room["started"] = True
     room["game_over"] = False
+    room["winner"] = None
+    room["end_reason"] = None
+    room["moves"] = []
     room["last_tick"] = time.monotonic()
     await broadcast_room(room, {"type": "start", "roomId": room_id})
     await update_room_clock(room_id, room)
@@ -75,20 +86,31 @@ async def start_room(room_id, room):
 async def handle_room_connection(websocket, room_id):
     room = ROOMS.setdefault(room_id, create_room())
     if len(room["players"]) + len(room["pending"]) >= 2:
-        await send_message(websocket, {"type": "error", "message": "La sala ya tiene dos jugadores."})
-        return
-    room["pending"].append(websocket)
-
-    if not room["players"] and room["pending"][0] is websocket:
-        await send_message(websocket, {"type": "init", "needsColor": True, "roomId": room_id})
-    elif len(room["players"]) == 1:
-        available_color = "B" if "W" in room["players"] else "W"
-        room["pending"].remove(websocket)
-        room["players"][available_color] = websocket
-        await send_message(websocket, {"type": "init", "color": available_color, "roomId": room_id})
-        await start_room(room_id, room)
+        room["spectators"].add(websocket)
+        await send_message(websocket, {
+            "type": "init",
+            "spectator": True,
+            "roomId": room_id,
+            "moves": room["moves"],
+            "clocks": room["clocks"],
+            "turn": room["turn"],
+            "running": room["started"] and not room["game_over"],
+            "gameOver": room["game_over"],
+            "winner": room["winner"],
+            "endReason": room["end_reason"],
+        })
     else:
-        await send_message(websocket, {"type": "init", "waitingForColor": True, "roomId": room_id})
+        room["pending"].append(websocket)
+        if not room["players"] and room["pending"][0] is websocket:
+            await send_message(websocket, {"type": "init", "needsColor": True, "roomId": room_id})
+        elif len(room["players"]) == 1:
+            available_color = "B" if "W" in room["players"] else "W"
+            room["pending"].remove(websocket)
+            room["players"][available_color] = websocket
+            await send_message(websocket, {"type": "init", "color": available_color, "roomId": room_id})
+            await start_room(room_id, room)
+        else:
+            await send_message(websocket, {"type": "init", "waitingForColor": True, "roomId": room_id})
 
     try:
         async for message in websocket:
@@ -119,7 +141,7 @@ async def handle_room_connection(websocket, room_id):
                 await update_room_clock(room_id, room)
                 if room["game_over"] or player_color != room["turn"]:
                     continue
-                await broadcast_room(room, {
+                move = {
                     "type": "move",
                     "fromRow": data["fromRow"],
                     "fromCol": data["fromCol"],
@@ -127,7 +149,11 @@ async def handle_room_connection(websocket, room_id):
                     "toCol": data["toCol"],
                     "promotedPiece": data.get("promotedPiece"),
                     "roomId": room_id,
-                }, exclude=websocket)
+                }
+                room["moves"].append({key: move[key] for key in (
+                    "fromRow", "fromCol", "toRow", "toCol", "promotedPiece"
+                )})
+                await broadcast_room(room, move, exclude=websocket)
                 room["turn"] = "B" if room["turn"] == "W" else "W"
                 room["last_tick"] = time.monotonic()
                 await update_room_clock(room_id, room)
@@ -142,24 +168,28 @@ async def handle_room_connection(websocket, room_id):
                 }, exclude=websocket)
                 await end_room(room_id, room, "B" if player_color == "W" else "W", "resign")
             elif msg_type == "offer_draw":
+                if player_color is None or room["game_over"]:
+                    continue
                 await broadcast_room(room, {
                     "type": "offer_draw",
                     "sender": player_color,
                     "color": player_color,
                     "roomId": room_id,
-                }, exclude=websocket)
+                }, exclude=websocket, include_spectators=False)
             elif msg_type == "accept_draw":
                 if player_color is not None and not room["game_over"]:
                     await broadcast_room(room, {"type": "accept_draw", "roomId": room_id}, exclude=websocket)
                     await end_room(room_id, room, None, "draw")
             elif msg_type == "request_rematch":
+                if player_color is None:
+                    continue
                 await broadcast_room(room, {
                     "type": "rematch_offered",
                     "senderColor": player_color,
                     "roomId": room_id,
-                }, exclude=websocket)
+                }, exclude=websocket, include_spectators=False)
             elif msg_type == "accept_rematch":
-                if len(room["players"]) == 2:
+                if player_color is not None and len(room["players"]) == 2:
                     white_player = room["players"].get("W")
                     black_player = room["players"].get("B")
                     room["players"] = {"W": black_player, "B": white_player}
@@ -171,16 +201,20 @@ async def handle_room_connection(websocket, room_id):
     except websockets.exceptions.ConnectionClosed:
         pass
     finally:
+        room["spectators"].discard(websocket)
         if websocket in room["pending"]:
             room["pending"].remove(websocket)
+        was_player = False
         for color, player in list(room["players"].items()):
             if player is websocket:
                 del room["players"][color]
-        room["started"] = False
-        await broadcast_room(room, {"type": "opponent_left", "roomId": room_id})
+                was_player = True
+        if was_player:
+            room["started"] = False
+            await broadcast_room(room, {"type": "opponent_left", "roomId": room_id})
         if not room["players"] and room["pending"]:
             await send_message(room["pending"][0], {"type": "init", "needsColor": True, "roomId": room_id})
-        if not room["players"] and not room["pending"]:
+        if not room["players"] and not room["pending"] and not room["spectators"]:
             ROOMS.pop(room_id, None)
 
 async def clock_loop():
