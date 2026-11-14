@@ -11,6 +11,46 @@ const drawBtn = document.getElementById('draw-btn');
 const resignBtn = document.getElementById('resign-btn'); 
 const clearHistoryBtn = document.getElementById('clear-history-btn');
 const rematchBtn = document.getElementById('rematch-btn'); 
+const notificationOverlay = document.getElementById('notification-overlay');
+const notificationTitle = document.getElementById('notification-title');
+const notificationMessage = document.getElementById('notification-message');
+const notificationAccept = document.getElementById('notification-accept');
+const notificationReject = document.getElementById('notification-reject');
+
+let notificationQueue = Promise.resolve();
+
+function showNotification({ title, message, acceptText = 'Entendido', rejectText = null, tone = 'info' }) {
+    const pendingNotification = notificationQueue.then(() => new Promise(resolve => {
+        notificationTitle.textContent = title;
+        notificationMessage.textContent = message;
+        notificationAccept.textContent = acceptText;
+        notificationReject.textContent = rejectText || 'Rechazar';
+        notificationReject.hidden = !rejectText;
+        notificationOverlay.dataset.tone = tone;
+        notificationOverlay.hidden = false;
+
+        const finish = accepted => {
+            notificationOverlay.hidden = true;
+            notificationAccept.removeEventListener('click', accept);
+            notificationReject.removeEventListener('click', reject);
+            document.removeEventListener('keydown', handleKeydown);
+            resolve(accepted);
+        };
+        const accept = () => finish(true);
+        const reject = () => finish(false);
+        const handleKeydown = event => {
+            if (event.key === 'Escape') finish(rejectText ? false : true);
+        };
+
+        notificationAccept.addEventListener('click', accept);
+        notificationReject.addEventListener('click', reject);
+        document.addEventListener('keydown', handleKeydown);
+        notificationAccept.focus();
+    }));
+
+    notificationQueue = pendingNotification.then(() => undefined, () => undefined);
+    return pendingNotification;
+}
 
 // ====== CONFIGURACIÓN Y ESTADO DE LA RED (WEBSOCKET) ======
 const socket = new WebSocket('wss://ajedrez-backend-fyjz.onrender.com');
@@ -68,7 +108,7 @@ socket.onopen = function() {
     iniciarPingAutomatico(); 
 };
 
-socket.onmessage = function(event) {
+socket.onmessage = async function(event) {
     const data = JSON.parse(event.data); 
 
     if (data.type === 'pong') return; 
@@ -96,9 +136,9 @@ socket.onmessage = function(event) {
     if (data.type === 'resign') { 
         const colorRendido = data.color || data.colorQueAbandona;
         if (colorRendido === 'W') {
-            alert("El oponente de las Blancas se rindió, eres el ganador.");
+            await showNotification({ title: 'Partida finalizada', message: 'El oponente de las Blancas se rindió. Eres el ganador.' });
         } else {
-            alert("El oponente de las Negras se rindió, eres el ganador.");
+            await showNotification({ title: 'Partida finalizada', message: 'El oponente de las Negras se rindió. Eres el ganador.' });
         }
         finalizarPorRendicion(colorRendido); 
     }
@@ -111,14 +151,14 @@ socket.onmessage = function(event) {
 
     // RECEPCIÓN DE TABLAS ACEPTADAS
     if (data.type === 'accept_draw') { 
-        alert("¡Oferta de tablas aceptada! Empate.");
+        await showNotification({ title: 'Tablas aceptadas', message: 'La partida terminó en empate.' });
         finalizarPorTablas(); 
     }
 
     // RECEPCIÓN DE PROPUESTA DE REVANCHA
     if (data.type === 'rematch_offered') {
         const textoRival = data.senderColor === 'W' ? 'Blancas' : 'Negras';
-        if (confirm(`El jugador de las ${textoRival} te ofrece una revancha. ¿Aceptas?`)) {
+        if (await showNotification({ title: 'Propuesta de revancha', message: `El jugador de las ${textoRival} te ofrece una revancha.`, acceptText: 'Aceptar revancha', rejectText: 'Ahora no', tone: 'decision' })) {
             if (socket.readyState === WebSocket.OPEN) {
                 socket.send(JSON.stringify({ type: 'accept_rematch' }));
             }
@@ -133,7 +173,7 @@ socket.onmessage = function(event) {
         turnIndicator.style.backgroundColor = '#b45309'; 
     }
     if (data.type === 'error') { 
-        alert(data.message); 
+        showNotification({ title: 'Aviso de conexión', message: data.message });
     }
 };
 
@@ -151,18 +191,19 @@ socket.onclose = function() {
 resignBtn.addEventListener('click', () => {
     if (!partidaIniciada || isGameOver) return; 
     
-    if (confirm("¿Estás seguro de que quieres rendirte?")) { 
+    showNotification({ title: 'Rendirse', message: '¿Estás seguro de que quieres rendirte?', acceptText: 'Sí, rendirme', rejectText: 'Continuar jugando', tone: 'decision' }).then(accepted => {
+        if (!accepted) return;
         if (socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({ type: "resign", color: miColor, colorQueAbandona: miColor })); 
         }
         finalizarPorRendicion(miColor); 
-    }
+    });
 });
 
 drawBtn.addEventListener('click', () => {
     if (!partidaIniciada || isGameOver) return; 
     
-    alert("Oferta de tablas enviada a tu rival. Esperando respuesta..."); 
+    showNotification({ title: 'Oferta enviada', message: 'Tu rival recibió la oferta de tablas. Esperando respuesta.' });
     if (socket.readyState === WebSocket.OPEN) {
         socket.send(JSON.stringify({ type: "offer_draw", sender: miColor, color: miColor })); 
     }
@@ -170,22 +211,23 @@ drawBtn.addEventListener('click', () => {
 
 if (clearHistoryBtn) {
     clearHistoryBtn.addEventListener('click', () => {
-        if (confirm("¿Seguro que deseas borrar todo el historial de partidas guardadas?")) {
+        showNotification({ title: 'Borrar historial', message: '¿Seguro que deseas borrar todas las partidas guardadas?', acceptText: 'Borrar historial', rejectText: 'Cancelar', tone: 'decision' }).then(accepted => {
+            if (!accepted) return;
             localStorage.removeItem('chess_match_history');
             matchHistory = [];
             renderHistoryLog();
-            alert("Historial borrado correctamente.");
-        }
+            showNotification({ title: 'Historial borrado', message: 'Se eliminaron las partidas guardadas.' });
+        });
     });
 }
 
 if (rematchBtn) {
     rematchBtn.addEventListener('click', () => {
         if (!isGameOver) {
-            alert("La partida aún está en curso.");
+            showNotification({ title: 'Partida en curso', message: 'La revancha estará disponible cuando termine la partida.' });
             return;
         }
-        alert("Propuesta de revancha enviada al oponente. Esperando respuesta...");
+        showNotification({ title: 'Propuesta enviada', message: 'Tu rival recibió la solicitud de revancha. Esperando respuesta.' });
         if (socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({ type: 'request_rematch', senderColor: miColor }));
         }
@@ -207,17 +249,17 @@ function finalizarPorRendicion(colorQueAbandona) {
     drawBoard(); 
 }
 
-function recibirOfertaTablas(quienOfrece) {
+async function recibirOfertaTablas(quienOfrece) {
     const textoOponente = quienOfrece === 'W' ? 'las Blancas' : 'las Negras';
     
-    if (confirm(`El oponente de ${textoOponente} ofrece tablas. ¿Deseas aceptar el ofrecimiento?`)) { 
+    if (await showNotification({ title: 'Oferta de tablas', message: `El oponente de ${textoOponente} propone terminar la partida en empate.`, acceptText: 'Aceptar tablas', rejectText: 'Rechazar', tone: 'decision' })) {
         if (socket.readyState === WebSocket.OPEN) {
             socket.send(JSON.stringify({ type: "accept_draw" })); 
         }
-        alert("Has aceptado las tablas. Partida terminada en Empate.");
+        await showNotification({ title: 'Tablas aceptadas', message: 'La partida terminó en empate.' });
         finalizarPorTablas(); 
     } else {
-        alert("Has declinado el ofrecimiento. La partida continúa.");
+        showNotification({ title: 'Oferta rechazada', message: 'La partida continúa.' });
     }
 }
 

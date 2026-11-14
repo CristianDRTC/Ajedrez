@@ -59,6 +59,19 @@
         </div>
     </div>
 
+    <div id="notification-overlay" class="notification-overlay" hidden>
+        <section class="notification-dialog" role="dialog" aria-modal="true" aria-labelledby="notification-title" aria-describedby="notification-message">
+            <div class="notification-mark" aria-hidden="true">♟</div>
+            <p class="notification-eyebrow">Ajedrez en línea</p>
+            <h2 id="notification-title"></h2>
+            <p id="notification-message" class="notification-message"></p>
+            <div class="notification-actions">
+                <button id="notification-reject" class="notification-button notification-button--reject" type="button"></button>
+                <button id="notification-accept" class="notification-button notification-button--accept" type="button"></button>
+            </div>
+        </section>
+    </div>
+
     <script src="index.js"></script>
 </body>
 </html>
