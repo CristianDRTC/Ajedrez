@@ -50,8 +50,9 @@ body {
 
 .board-wrapper {
     position: relative;
-    width: 600px;
-    height: 600px;
+    width: min(600px, calc(100vh - 80px));
+    height: auto;
+    aspect-ratio: 1;
     overflow: hidden;
     background: var(--bg-panel);
     border-radius: 4px;
@@ -168,7 +169,6 @@ body {
     flex-direction: column;
     justify-content: space-between;
     align-self: stretch;
-    gap: 10px;
     width: 90px;
     padding: 24px 0;
 }
@@ -177,6 +177,7 @@ body {
     display: flex;
     flex-direction: column;
     gap: 8px;
+    align-self: stretch;
     padding: 10px 7px;
     color: #d7d5ca;
     text-align: center;
@@ -186,8 +187,11 @@ body {
     border-radius: 5px;
 }
 
-.board-clock-panel .board-clock:first-child { align-self: flex-start; }
-.board-clock-panel .board-clock:nth-child(2) { align-self: flex-end; }
+.board-clock-panel[data-orientation="white"] .black-clock-card { order: 1; }
+.board-clock-panel[data-orientation="white"] .white-clock-card { order: 2; }
+.board-clock-panel[data-orientation="black"] .white-clock-card { order: 1; }
+.board-clock-panel[data-orientation="black"] .black-clock-card { order: 2; }
+.board-clock-panel .spectator-note { order: 3; }
 
 .white-clock-card { border-left: 3px solid #e6e6e6; }
 .black-clock-card { border-left: 3px solid #555; }
@@ -433,6 +437,7 @@ body {
 }
 
 .notification-overlay[data-tone="decision"] .notification-dialog { border-top-color: #d3b46b; }
+.notification-overlay[data-tone="result"] .notification-dialog { border-top-color: #d6ad4f; }
 
 .notification-mark {
     display: grid;
@@ -448,6 +453,7 @@ body {
 }
 
 .notification-overlay[data-tone="decision"] .notification-mark { background: rgba(211, 180, 107, 0.12); border-color: rgba(211, 180, 107, 0.36); }
+.notification-overlay[data-tone="result"] .notification-mark { color: #f0c75e; background: rgba(214, 173, 79, 0.14); border-color: rgba(214, 173, 79, 0.4); }
 .notification-eyebrow { margin-bottom: 8px; color: #b7b5a9; font-size: 11px; font-weight: 700; text-transform: uppercase; }
 .notification-dialog h2 { font-size: 22px; line-height: 1.25; }
 .notification-message { margin-top: 11px; color: #c9c8c0; font-size: 15px; line-height: 1.55; overflow-wrap: anywhere; }
@@ -551,8 +557,8 @@ body.room-lobby {
 
     .game-container { max-width: none; gap: 12px; align-items: center; }
     .board-container { gap: 8px; padding: 8px; }
-    .board-wrapper { width: min(600px, calc(100vw - 580px)); height: auto; aspect-ratio: 1; }
-    .board-clock-panel { width: 76px; gap: 8px; padding-top: 20px; }
+    .board-wrapper { width: min(600px, calc(100vw - 580px), calc(100vh - 80px)); }
+    .board-clock-panel { width: 76px; gap: 8px; padding: 24px 0; }
     .control-panel { flex: 0 0 min(350px, 34vw); width: min(350px, 34vw); padding: 14px; gap: 10px; }
     .actions-container { flex-wrap: wrap; }
     .btn-action { min-width: 42%; padding: 10px 6px; font-size: 12px; }
@@ -562,9 +568,9 @@ body.room-lobby {
     body:not(.room-lobby) { align-items: flex-start; padding: 6px; }
     .game-container { flex-direction: row; align-items: center; gap: 8px; max-width: none; }
     .board-container { flex: 0 0 auto; gap: 6px; padding: 4px; }
-    .board-wrapper { width: calc(100vw - 405px); height: auto; aspect-ratio: 1; }
+    .board-wrapper { width: min(calc(100vw - 405px), calc(100vh - 80px)); }
     .square span { font-size: clamp(22px, 4.2vw, 34px); }
-    .board-clock-panel { width: 64px; gap: 6px; padding-top: 20px; }
+    .board-clock-panel { width: 64px; gap: 6px; padding: 20px 0; }
     .board-clock { gap: 5px; padding: 7px 3px; font-size: 10px; }
     .board-clock strong.player-clock { padding: 5px 2px; font-size: 12px; }
     .control-panel { flex: 0 0 min(290px, 40vw); width: min(290px, 40vw) !important; max-width: none; padding: 10px; gap: 8px; }
@@ -587,11 +593,10 @@ body.room-lobby {
     body:not(.room-lobby) { align-items: flex-start; padding: 12px 8px; }
     .game-container { flex-direction: column; align-items: center; gap: 12px; }
     .board-container { flex-direction: column; align-items: center; gap: 8px; padding: 8px 0; }
-    .board-wrapper { width: min(90vw, 600px); height: auto; aspect-ratio: 1; }
-    .board-clock-panel { flex-direction: row; align-self: auto; width: min(90vw, 600px); padding: 0; }
+    .board-wrapper { width: min(90vw, 600px, calc(100vh - 80px)); height: auto; aspect-ratio: 1; }
+    .board-clock-panel { flex-direction: row; align-self: auto; justify-content: flex-start; width: min(90vw, 600px); padding: 0; }
     .board-clock { flex: 1; flex-direction: row; align-items: center; justify-content: space-between; padding: 8px 10px; }
-    .board-clock-panel .board-clock:first-child,
-    .board-clock-panel .board-clock:nth-child(2) { align-self: auto; }
+    .board-clock-panel .board-clock { align-self: auto; }
     .board-clock strong.player-clock { min-width: 66px; font-size: 15px; }
     .control-panel { width: min(100%, 600px) !important; padding: 16px; }
     .actions-container { flex-wrap: wrap; }

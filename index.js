@@ -14,6 +14,7 @@ const rematchBtn = document.getElementById('rematch-btn');
 const notificationOverlay = document.getElementById('notification-overlay');
 const notificationTitle = document.getElementById('notification-title');
 const notificationMessage = document.getElementById('notification-message');
+const notificationMark = document.querySelector('.notification-mark');
 const notificationAccept = document.getElementById('notification-accept');
 const notificationReject = document.getElementById('notification-reject');
 const colorSelector = document.getElementById('color-selector');
@@ -25,10 +26,11 @@ const spectatorNote = document.getElementById('spectator-note');
 
 let notificationQueue = Promise.resolve();
 
-function showNotification({ title, message, acceptText = 'Entendido', rejectText = null, tone = 'info' }) {
+function showNotification({ title, message, acceptText = 'Entendido', rejectText = null, tone = 'info', icon = '♟' }) {
     const pendingNotification = notificationQueue.then(() => new Promise(resolve => {
         notificationTitle.textContent = title;
         notificationMessage.textContent = message;
+        notificationMark.textContent = icon;
         notificationAccept.textContent = acceptText;
         notificationReject.textContent = rejectText || 'Rechazar';
         notificationReject.hidden = !rejectText;
@@ -75,6 +77,7 @@ let selectedSquare = null;
 let validMoves = []; 
 let isGameOver = false; 
 let isSpectator = false;
+let resultNotificationShown = false;
 let roomClock = { W: 600, B: 600, turn: 'W', running: false, receivedAt: 0 };
 
 let currentGameMoves = []; 
@@ -159,7 +162,7 @@ socket.onmessage = async function(event) {
             turnIndicator.innerText = data.gameOver
                 ? `Modo espectador · Partida finalizada${data.winner ? `. Ganaron las ${data.winner === 'W' ? 'Blancas' : 'Negras'}` : '.'}`
                 : data.running ? 'Modo espectador · Partida en curso' : 'Modo espectador · Esperando inicio';
-            if (data.gameOver) showPlayerResults(data.winner);
+            if (data.gameOver && data.winner) showGameResultNotification(data.winner, data.endReason);
             drawBoard();
             return;
         }
@@ -185,6 +188,7 @@ socket.onmessage = async function(event) {
         if (isSpectator) {
             resetTableroLocal();
             isGameOver = false;
+            resultNotificationShown = false;
             partidaIniciada = false;
             resignBtn.disabled = true;
             drawBtn.disabled = true;
@@ -195,6 +199,7 @@ socket.onmessage = async function(event) {
         }
         partidaIniciada = true; 
         isGameOver = false; 
+        resultNotificationShown = false;
         clearPlayerResults();
         resignBtn.disabled = false; 
         drawBtn.disabled = false; 
@@ -226,11 +231,6 @@ socket.onmessage = async function(event) {
         if (isSpectator) {
             finishRoomGame(colorRendido === 'W' ? 'B' : 'W', 'resign');
             return;
-        }
-        if (colorRendido === 'W') {
-            await showNotification({ title: 'Partida finalizada', message: 'El oponente de las Blancas se rindió. Eres el ganador.' });
-        } else {
-            await showNotification({ title: 'Partida finalizada', message: 'El oponente de las Negras se rindió. Eres el ganador.' });
         }
         finalizarPorRendicion(colorRendido); 
     }
@@ -331,6 +331,21 @@ function showPlayerResults(winner) {
     });
 }
 
+function showGameResultNotification(winner, reason) {
+    if (!winner || resultNotificationShown) return;
+    resultNotificationShown = true;
+    const winnerName = winner === 'W' ? 'Blancas' : 'Negras';
+    const loserName = winner === 'W' ? 'Negras' : 'Blancas';
+    const ending = reason === 'timeout' ? ' por tiempo' : reason === 'resign' ? ' por rendición' : reason === 'checkmate' ? ' por jaque mate' : '';
+    showNotification({
+        title: '¡Ganador!',
+        message: `Las ${winnerName} ganan${ending}. Las ${loserName} perdieron.`,
+        acceptText: 'Cerrar',
+        tone: 'result',
+        icon: '🏆'
+    });
+}
+
 function finishRoomGame(winner, reason) {
     if (!roomMode) return;
     isGameOver = true;
@@ -338,7 +353,7 @@ function finishRoomGame(winner, reason) {
     resignBtn.disabled = true;
     drawBtn.disabled = true;
     roomClock.running = false;
-    showPlayerResults(winner);
+    showGameResultNotification(winner, reason);
     if (isSpectator && winner) {
         turnIndicator.innerText = `Modo espectador · Ganaron las ${winner === 'W' ? 'Blancas' : 'Negras'}`;
         turnIndicator.style.backgroundColor = '#4b5563';
@@ -420,7 +435,7 @@ function finalizarPorRendicion(colorQueAbandona) {
     const ganadorText = colorQueAbandona === 'W' ? 'Negras ⬛' : 'Blancas ⬜'; 
     turnIndicator.innerHTML = `🏳️ Partida finalizada. Ganan las ${ganadorText}`; 
     turnIndicator.style.backgroundColor = '#b91c1c'; 
-    showPlayerResults(colorQueAbandona === 'W' ? 'B' : 'W');
+    showGameResultNotification(colorQueAbandona === 'W' ? 'B' : 'W', 'resign');
     
     if (miColor === 'W') calcularNuevoElo(colorQueAbandona === 'W' ? 'B' : 'W', ganadorText);
     drawBoard(); 
@@ -605,6 +620,8 @@ function drawBoard() {
     boardElement.innerHTML = ''; 
 
     const blackOrientation = miColor === 'B';
+    const clockPanel = document.querySelector('.board-clock-panel');
+    if (clockPanel) clockPanel.dataset.orientation = blackOrientation ? 'black' : 'white';
     if (blackOrientation) {
         boardElement.style.transform = 'rotate(180deg)'; 
     } else {
@@ -768,7 +785,7 @@ function executeMove(fromRow, fromCol, toRow, toCol, enviarServidor = true, piez
         turnIndicator.innerHTML = `🏆 ¡Jaque Mate! Ganan las ${ganadorText}`; 
         turnIndicator.style.backgroundColor = '#47a047'; 
         if (miColor === 'W') calcularNuevoElo(currentTurn === 'W' ? 'B' : 'W', ganadorText);
-        showPlayerResults(currentTurn === 'W' ? 'B' : 'W');
+        showGameResultNotification(currentTurn === 'W' ? 'B' : 'W', 'checkmate');
         sendRoomGameOver(currentTurn === 'W' ? 'B' : 'W', 'checkmate');
         drawBoard();
     }
