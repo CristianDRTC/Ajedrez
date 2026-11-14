@@ -85,7 +85,8 @@ async def start_room(room_id, room):
 
 async def handle_room_connection(websocket, room_id):
     room = ROOMS.setdefault(room_id, create_room())
-    if len(room["players"]) + len(room["pending"]) >= 2:
+    occupied_seats = len(room["players"]) + len(room["pending"])
+    if occupied_seats >= 2:
         room["spectators"].add(websocket)
         await send_message(websocket, {
             "type": "init",
@@ -101,7 +102,7 @@ async def handle_room_connection(websocket, room_id):
         })
     else:
         room["pending"].append(websocket)
-        if not room["players"] and room["pending"][0] is websocket:
+        if occupied_seats == 0:
             await send_message(websocket, {"type": "init", "needsColor": True, "roomId": room_id})
         elif len(room["players"]) == 1:
             available_color = "B" if "W" in room["players"] else "W"
@@ -121,15 +122,20 @@ async def handle_room_connection(websocket, room_id):
             if msg_type == "ping":
                 await send_message(websocket, {"type": "pong"})
             elif msg_type == "choose_color":
-                if room["pending"] and room["pending"][0] is websocket and not room["players"]:
+                if websocket in room["pending"] and len(room["players"]) < 2:
                     chosen_color = data.get("color")
                     if chosen_color not in ("W", "B"):
                         await send_message(websocket, {"type": "error", "message": "Elige Blancas o Negras."})
                         continue
+                    if chosen_color in room["players"]:
+                        await send_message(websocket, {"type": "error", "message": "Ese color ya está ocupado. Elige el otro color."})
+                        continue
                     room["pending"].remove(websocket)
                     room["players"][chosen_color] = websocket
                     await send_message(websocket, {"type": "init", "color": chosen_color, "roomId": room_id})
-                    if room["pending"]:
+                    if len(room["players"]) == 2:
+                        await start_room(room_id, room)
+                    elif room["pending"]:
                         second_player = room["pending"].pop(0)
                         remaining_color = "B" if chosen_color == "W" else "W"
                         room["players"][remaining_color] = second_player
