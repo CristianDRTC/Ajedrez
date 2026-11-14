@@ -154,6 +154,16 @@ body {
     box-shadow: inset 0 0 0 5px rgba(247, 247, 105, 0.8) !important;
 }
 
+.square.last-move {
+    background: #c8e8bb !important;
+    box-shadow: inset 0 0 0 3px rgba(75, 125, 64, 0.5);
+}
+
+.square.last-move.selected {
+    background: rgba(247, 247, 105, 0.55) !important;
+    box-shadow: inset 0 0 0 5px rgba(247, 247, 105, 0.9) !important;
+}
+
 .square.suggested::after {
     position: absolute;
     z-index: 3;

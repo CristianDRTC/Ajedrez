@@ -75,6 +75,7 @@ let partidaIniciada = false;
 let currentTurn = 'W'; 
 let selectedSquare = null; 
 let validMoves = []; 
+let lastMove = null;
 let isGameOver = false; 
 let isSpectator = false;
 let resultNotificationShown = false;
@@ -120,7 +121,7 @@ function iniciarPingAutomatico() {
 
 // ====== CONTROLADORES DE EVENTOS WEBSOCKET ======
 socket.onopen = function() {
-    turnIndicator.innerText = "Conectado. Buscando oponente..."; 
+    turnIndicator.innerText = roomMode ? 'Conectado a la sala. Esperando partida...' : 'Conectado. Buscando oponente...';
     turnIndicator.style.backgroundColor = '#1e3a8a'; 
     iniciarPingAutomatico(); 
 };
@@ -276,13 +277,15 @@ socket.onmessage = async function(event) {
 };
 
 socket.onerror = function() {
-    turnIndicator.innerText = "Modo Local / Conectando..."; 
+    turnIndicator.innerText = 'Conexión inestable. Las jugadas están pausadas.';
     turnIndicator.style.backgroundColor = '#b91c1c'; 
 };
 
 socket.onclose = function() {
-    turnIndicator.innerText = "Desconectado. Reintentando..."; 
+    turnIndicator.innerText = 'Conexión perdida. No se están enviando jugadas.';
     turnIndicator.style.backgroundColor = '#b91c1c'; 
+    resignBtn.disabled = true;
+    drawBtn.disabled = true;
 };
 
 document.querySelectorAll('.color-choice').forEach(button => {
@@ -481,6 +484,7 @@ function resetTableroLocal() {
     currentTurn = 'W';
     selectedSquare = null;
     validMoves = [];
+    lastMove = null;
     currentGameMoves = [];
     
     if(resignBtn) resignBtn.disabled = false;
@@ -666,6 +670,11 @@ function drawBoard() {
             }
 
             if (selectedSquare && selectedSquare.row === row && selectedSquare.col === col) square.classList.add('selected');
+
+            if (lastMove && (
+                (lastMove.fromRow === row && lastMove.fromCol === col) ||
+                (lastMove.toRow === row && lastMove.toCol === col)
+            )) square.classList.add('last-move');
             
             if (validMoves.some(m => m.row === row && m.col === col)) {
                 if (piece && getPieceColor(piece) !== currentTurn) {
@@ -683,6 +692,11 @@ function drawBoard() {
 
 function handleSquareClick(event) {
     if (isSpectator || isGameOver || !partidaIniciada) return;
+    if (socket.readyState !== WebSocket.OPEN) {
+        turnIndicator.innerText = 'Sin conexión. Espera a que vuelva la conexión para mover.';
+        turnIndicator.style.backgroundColor = '#b91c1c';
+        return;
+    }
     if (currentTurn !== miColor) return; 
 
     const square = event.currentTarget; 
@@ -710,6 +724,7 @@ function handleSquareClick(event) {
 function executeMove(fromRow, fromCol, toRow, toCol, enviarServidor = true, piezaPromocionadaRemota = null) {
     let piece = boardState[fromRow][fromCol]; 
     if (!piece) return; 
+    lastMove = { fromRow, fromCol, toRow, toCol };
 
     const type = piece.toLowerCase(); 
     const color = getPieceColor(piece); 
