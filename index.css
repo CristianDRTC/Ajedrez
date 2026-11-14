@@ -412,6 +412,172 @@ body {
     animation: notification-rise-in 220ms ease-out;
 }
 
+/* Selector de color y marcadores de partida */
+.color-selector {
+    padding: 13px;
+    background: #1e1e1c;
+    border: 1px solid #47453d;
+    border-radius: var(--border-radius);
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+.color-selector[hidden] {
+    display: none;
+}
+
+.color-selector-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.color-choice {
+    flex: 1;
+    min-height: 38px;
+    color: var(--text-main);
+    background: #3c3b37;
+    border: 1px solid #55534a;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.color-choice:hover:not(:disabled) {
+    background: #4e4d47;
+}
+
+.color-choice:disabled {
+    opacity: 0.55;
+    cursor: wait;
+}
+
+.player-clock {
+    min-width: 62px;
+    padding: 4px 6px;
+    color: #e8e7de;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    background: #34332f;
+    border-radius: 4px;
+}
+
+.player-clock.active {
+    color: #172010;
+    background: #a9c77c;
+}
+
+.player-result {
+    flex-basis: 100%;
+    padding: 5px 7px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 4px;
+}
+
+.player-result[hidden] {
+    display: none;
+}
+
+.player-result.winner {
+    color: #e7f2d8;
+    background: #397443;
+}
+
+.player-result.loser {
+    color: #f0d7d4;
+    background: #752f2b;
+}
+
+.elo-box {
+    flex-wrap: wrap;
+}
+
+/* Pestañas superiores de salas independientes */
+body.room-lobby {
+    display: block;
+    min-height: 100vh;
+    padding: 0;
+    background: radial-gradient(ellipse at top, #303029 0, #161512 65%);
+}
+
+.room-lobby-shell {
+    width: min(100%, 1500px);
+    min-height: 100vh;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+.room-switcher {
+    display: flex;
+    gap: 5px;
+    width: fit-content;
+    max-width: 100%;
+    margin: 0 auto 18px;
+    padding: 5px;
+    background: #20201d;
+    border: 1px solid #3b3a34;
+    border-radius: 6px;
+}
+
+.room-tab {
+    min-width: 126px;
+    min-height: 42px;
+    padding: 0 16px;
+    color: #c3c1b7;
+    font-size: 14px;
+    font-weight: 650;
+    background: transparent;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.room-tab:hover:not(.active) {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.06);
+}
+
+.room-tab.active {
+    color: #fff;
+    background: #3d4c32;
+    box-shadow: inset 0 0 0 1px rgba(175, 201, 140, 0.3);
+}
+
+.room-frame {
+    display: block;
+    width: 100%;
+    height: calc(100vh - 100px);
+    min-height: 720px;
+    border: 0;
+}
+
+.room-frame[hidden] {
+    display: none;
+}
+
+@media (max-width: 600px) {
+    .room-lobby-shell {
+        padding: 12px 8px;
+    }
+
+    .room-switcher {
+        width: 100%;
+    }
+
+    .room-tab {
+        flex: 1;
+        min-width: 0;
+        padding: 0 7px;
+        font-size: 13px;
+    }
+
+    .room-frame {
+        height: calc(100vh - 80px);
+        min-height: 800px;
+    }
+}
+
 .notification-overlay[data-tone="decision"] .notification-dialog {
     border-top-color: #d3b46b;
 }

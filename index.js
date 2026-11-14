@@ -16,6 +16,11 @@ const notificationTitle = document.getElementById('notification-title');
 const notificationMessage = document.getElementById('notification-message');
 const notificationAccept = document.getElementById('notification-accept');
 const notificationReject = document.getElementById('notification-reject');
+const colorSelector = document.getElementById('color-selector');
+const clockWhite = document.getElementById('clock-white');
+const clockBlack = document.getElementById('clock-black');
+const resultWhite = document.getElementById('result-white');
+const resultBlack = document.getElementById('result-black');
 
 let notificationQueue = Promise.resolve();
 
@@ -53,7 +58,13 @@ function showNotification({ title, message, acceptText = 'Entendido', rejectText
 }
 
 // ====== CONFIGURACIÓN Y ESTADO DE LA RED (WEBSOCKET) ======
-const socket = new WebSocket('wss://ajedrez-backend-fyjz.onrender.com');
+const roomParameters = new URLSearchParams(window.location.search);
+const roomId = roomParameters.get('room');
+const roomMode = roomParameters.get('modern') === '1' && Boolean(roomId);
+const socketUrl = roomMode
+    ? `wss://ajedrez-backend-fyjz.onrender.com/?modern=1&room=${encodeURIComponent(roomId)}`
+    : 'wss://ajedrez-backend-fyjz.onrender.com';
+const socket = new WebSocket(socketUrl);
 
 // ====== VARIABLES DE ESTADO GLOBAL DEL JUEGO ======
 let miColor = null; 
@@ -62,6 +73,7 @@ let currentTurn = 'W';
 let selectedSquare = null; 
 let validMoves = []; 
 let isGameOver = false; 
+let roomClock = { W: 600, B: 600, turn: 'W', running: false, receivedAt: 0 };
 
 let currentGameMoves = []; 
 let matchHistory = JSON.parse(localStorage.getItem('chess_match_history')) || [];
@@ -114,7 +126,19 @@ socket.onmessage = async function(event) {
     if (data.type === 'pong') return; 
 
     if (data.type === 'init') { 
-        miColor = data.color; 
+        if (data.needsColor) {
+            if (colorSelector) colorSelector.hidden = false;
+            turnIndicator.innerText = 'Elige con qué piezas quieres jugar.';
+            turnIndicator.style.backgroundColor = '#1e3a8a';
+            return;
+        }
+        if (data.waitingForColor) {
+            turnIndicator.innerText = 'Esperando que el otro jugador elija piezas...';
+            turnIndicator.style.backgroundColor = '#1e3a8a';
+            return;
+        }
+        miColor = data.color;
+        if (colorSelector) colorSelector.hidden = true;
         turnIndicator.innerText = `Eres las ${miColor === 'W' ? 'Blancas ⬜' : 'Negras ⬛'}. Esperando rival...`;
         turnIndicator.style.backgroundColor = '#1e3a8a'; 
         resetTableroLocal(); 
@@ -123,6 +147,7 @@ socket.onmessage = async function(event) {
     if (data.type === 'start') { 
         partidaIniciada = true; 
         isGameOver = false; 
+        clearPlayerResults();
         resignBtn.disabled = false; 
         drawBtn.disabled = false; 
         actualizarBannerTurno(); 
@@ -130,6 +155,21 @@ socket.onmessage = async function(event) {
     }
     if (data.type === 'move') { 
         executeMove(data.fromRow, data.fromCol, data.toRow, data.toCol, false, data.promotedPiece || null);
+    }
+
+    if (data.type === 'clocks') {
+        roomClock = {
+            W: data.clocks.W,
+            B: data.clocks.B,
+            turn: data.turn,
+            running: data.running,
+            receivedAt: performance.now()
+        };
+        renderPlayerClocks();
+    }
+
+    if (data.type === 'game_over') {
+        finishRoomGame(data.winner, data.reason);
     }
 
     // RECEPCIÓN DE RENDICIÓN
@@ -186,6 +226,81 @@ socket.onclose = function() {
     turnIndicator.innerText = "Desconectado. Reintentando..."; 
     turnIndicator.style.backgroundColor = '#b91c1c'; 
 };
+
+document.querySelectorAll('.color-choice').forEach(button => {
+    button.addEventListener('click', () => {
+        if (!roomMode || socket.readyState !== WebSocket.OPEN) return;
+        document.querySelectorAll('.color-choice').forEach(choice => choice.disabled = true);
+        socket.send(JSON.stringify({ type: 'choose_color', color: button.dataset.color }));
+    });
+});
+
+setInterval(renderPlayerClocks, 250);
+
+function renderPlayerClocks() {
+    if (!roomMode || !clockWhite || !clockBlack) return;
+    const elapsed = roomClock.running ? (performance.now() - roomClock.receivedAt) / 1000 : 0;
+    const whiteSeconds = Math.max(0, roomClock.W - (roomClock.turn === 'W' ? elapsed : 0));
+    const blackSeconds = Math.max(0, roomClock.B - (roomClock.turn === 'B' ? elapsed : 0));
+    clockWhite.textContent = formatClock(whiteSeconds);
+    clockBlack.textContent = formatClock(blackSeconds);
+    clockWhite.classList.toggle('active', roomClock.running && roomClock.turn === 'W');
+    clockBlack.classList.toggle('active', roomClock.running && roomClock.turn === 'B');
+}
+
+function formatClock(seconds) {
+    const wholeSeconds = Math.ceil(seconds);
+    return `${String(Math.floor(wholeSeconds / 60)).padStart(2, '0')}:${String(wholeSeconds % 60).padStart(2, '0')}`;
+}
+
+function clearPlayerResults() {
+    [resultWhite, resultBlack].forEach(result => {
+        if (!result) return;
+        result.hidden = true;
+        result.textContent = '';
+        result.classList.remove('winner', 'loser');
+    });
+}
+
+function showPlayerResults(winner) {
+    if (!roomMode || !resultWhite || !resultBlack || !winner) return;
+    const entries = [{ color: 'W', element: resultWhite }, { color: 'B', element: resultBlack }];
+    entries.forEach(({ color, element }) => {
+        element.hidden = false;
+        element.classList.toggle('winner', color === winner);
+        element.classList.toggle('loser', color !== winner);
+        element.textContent = color === winner ? '🏆 ¡Ganador!' : 'Perdió';
+    });
+}
+
+function finishRoomGame(winner, reason) {
+    if (!roomMode) return;
+    isGameOver = true;
+    partidaIniciada = false;
+    resignBtn.disabled = true;
+    drawBtn.disabled = true;
+    roomClock.running = false;
+    showPlayerResults(winner);
+    if (winner) {
+        turnIndicator.innerText = winner === miColor ? '¡Ganaste la partida!' : 'Partida finalizada. Ganó tu oponente.';
+        turnIndicator.style.backgroundColor = winner === miColor ? '#47a047' : '#b91c1c';
+    } else if (reason === 'draw') {
+        turnIndicator.innerText = '🤝 Tablas - Empate Acordado';
+        turnIndicator.style.backgroundColor = '#4b5563';
+    } else if (reason === 'timeout') {
+        turnIndicator.innerText = 'Partida finalizada por tiempo agotado.';
+        turnIndicator.style.backgroundColor = '#b91c1c';
+    }
+    selectedSquare = null;
+    validMoves = [];
+    drawBoard();
+}
+
+function sendRoomGameOver(winner, reason) {
+    if (roomMode && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'game_over', winner, reason }));
+    }
+}
 
 // ====== MANIPULACIÓN DE BOTONES DE ACCIÓN GRÁFICA ======
 resignBtn.addEventListener('click', () => {
@@ -244,6 +359,7 @@ function finalizarPorRendicion(colorQueAbandona) {
     const ganadorText = colorQueAbandona === 'W' ? 'Negras ⬛' : 'Blancas ⬜'; 
     turnIndicator.innerHTML = `🏳️ Partida finalizada. Ganan las ${ganadorText}`; 
     turnIndicator.style.backgroundColor = '#b91c1c'; 
+    showPlayerResults(colorQueAbandona === 'W' ? 'B' : 'W');
     
     if (miColor === 'W') calcularNuevoElo(colorQueAbandona === 'W' ? 'B' : 'W', ganadorText);
     drawBoard(); 
@@ -309,6 +425,9 @@ function resetTableroLocal() {
         'W_king': false, 'W_rook_a': false, 'W_rook_h': false, 
         'B_king': false, 'B_rook_a': false, 'B_rook_h': false  
     };
+    clearPlayerResults();
+    if (colorSelector) colorSelector.hidden = true;
+    document.querySelectorAll('.color-choice').forEach(choice => choice.disabled = false);
     renderMovesLog();
 }
 
@@ -581,6 +700,8 @@ function executeMove(fromRow, fromCol, toRow, toCol, enviarServidor = true, piez
         turnIndicator.innerHTML = `🏆 ¡Jaque Mate! Ganan las ${ganadorText}`; 
         turnIndicator.style.backgroundColor = '#47a047'; 
         if (miColor === 'W') calcularNuevoElo(currentTurn === 'W' ? 'B' : 'W', ganadorText);
+        showPlayerResults(currentTurn === 'W' ? 'B' : 'W');
+        sendRoomGameOver(currentTurn === 'W' ? 'B' : 'W', 'checkmate');
         drawBoard();
     }
 }

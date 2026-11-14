@@ -6,72 +6,19 @@
     <title>Ajedrez Multijugador en Línea</title>
     <link rel="stylesheet" href="index.css">
 </head>
-<body>
-
-    <div class="game-container">
-        <div class="board-container">
-            <div class="board-wrapper">
-                <div id="chessboard"></div>
-            </div>
-        </div>
-
-        <div class="control-panel">
-            
-            <div id="turn-indicator" class="status-banner">
-                Conectando al servidor...
-            </div>
-
-            <div class="elo-container">
-                <div class="elo-box white-elo">
-                    <span>⚪ Blancas ELO:</span>
-                    <strong id="elo-white">1000</strong>
-                </div>
-                <div class="elo-box black-elo">
-                    <span>⚫ Negras ELO:</span>
-                    <strong id="elo-black">1000</strong>
-                </div>
-            </div>
-
-            <div class="actions-container">
-                <button id="draw-btn" class="btn-action">🤝 Ofrecer Tablas</button>
-                <button id="resign-btn" class="btn-action btn-danger" disabled>🏳️ Rendirse</button>
-                <button id="rematch-btn" class="btn-action btn-primary">🔄 Pedir Revancha</button>
-            </div>
-
-            <div class="tabs-container">
-                <button id="tab-moves-btn" class="tab-button active" onclick="switchTab('moves')">Movimientos</button>
-                <button id="tab-history-btn" class="tab-button" onclick="switchTab('history')">Historial de Partidas</button>
-            </div>
-
-            <div class="tabs-content-wrapper">
-                <div id="tab-moves" class="tab-content active">
-                    <div id="moves-log" class="log-box">
-                        </div>
-                </div>
-
-                <div id="tab-history" class="tab-content">
-                    <div id="games-history-log" class="log-box">
-                        </div>
-                    <button id="clear-history-btn" class="btn-clear-history">🗑️ Limpiar Historial Total</button>
-                </div>
-            </div>
-
-        </div>
-    </div>
-
-    <div id="notification-overlay" class="notification-overlay" hidden>
-        <section class="notification-dialog" role="dialog" aria-modal="true" aria-labelledby="notification-title" aria-describedby="notification-message">
-            <div class="notification-mark" aria-hidden="true">♟</div>
-            <p class="notification-eyebrow">Ajedrez en línea</p>
-            <h2 id="notification-title"></h2>
-            <p id="notification-message" class="notification-message"></p>
-            <div class="notification-actions">
-                <button id="notification-reject" class="notification-button notification-button--reject" type="button"></button>
-                <button id="notification-accept" class="notification-button notification-button--accept" type="button"></button>
-            </div>
+<body class="room-lobby">
+    <main class="room-lobby-shell">
+        <nav class="room-switcher" aria-label="Partidas abiertas" role="tablist">
+            <button class="room-tab active" id="room-tab-1" data-room-tab="1" role="tab" aria-selected="true">Partida 1</button>
+            <button class="room-tab" id="room-tab-2" data-room-tab="2" role="tab" aria-selected="false">Partida 2</button>
+            <button class="room-tab" id="room-tab-3" data-room-tab="3" role="tab" aria-selected="false">Partida 3</button>
+        </nav>
+        <section class="room-stage">
+            <iframe class="room-frame" data-room-frame="1" title="Partida 1" src="game.html?modern=1&amp;room=room-1"></iframe>
+            <iframe class="room-frame" data-room-frame="2" title="Partida 2" src="game.html?modern=1&amp;room=room-2" hidden></iframe>
+            <iframe class="room-frame" data-room-frame="3" title="Partida 3" src="game.html?modern=1&amp;room=room-3" hidden></iframe>
         </section>
-    </div>
-
-    <script src="index.js"></script>
+    </main>
+    <script src="rooms.js"></script>
 </body>
 </html>
